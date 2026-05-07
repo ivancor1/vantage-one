@@ -49,3 +49,44 @@ body {
   background: rgba(240, 192, 32, 0.25);
   color: #E2EAF0;
 }
+
+/* ─── Leaflet overrides ──────────────────────────────────────────────────── */
+
+/* Storm severity label (permanent tooltip) */
+.vantage-storm-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: inherit !important;
+}
+.vantage-storm-label::before {
+  display: none !important;
+}
+
+/* Property hover tooltip */
+.vantage-prop-tooltip {
+  background: #13191F !important;
+  border: 1px solid #1E2A35 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
+  color: #E2EAF0 !important;
+  padding: 6px 10px !important;
+}
+.vantage-prop-tooltip::before {
+  border-top-color: #1E2A35 !important;
+}
+
+/* Remove default popup close button styling */
+.leaflet-popup-content-wrapper {
+  background: #13191F;
+  border: 1px solid #1E2A35;
+  border-radius: 6px;
+  color: #E2EAF0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.leaflet-popup-tip {
+  background: #13191F;
+}

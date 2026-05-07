@@ -1,41 +1,65 @@
-import { Map, Layers, ZoomIn } from 'lucide-react'
+'use client'
+
+import dynamic from 'next/dynamic'
+import { useState } from 'react'
+import { Layers, ZoomIn, ZoomOut } from 'lucide-react'
+import type { Storm } from '@/lib/mock-data'
+import LayerControls from '@/components/map/LayerControls'
+import StormDetailPanel from '@/components/map/StormDetailPanel'
+
+const MapView = dynamic(() => import('@/components/map/MapView'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full flex items-center justify-center bg-vantage-black">
+      <div className="flex flex-col items-center gap-3">
+        <Layers className="w-6 h-6 text-vantage-yellow animate-pulse" />
+        <p className="text-vantage-muted text-xs font-mono">LOADING MAP...</p>
+      </div>
+    </div>
+  ),
+})
+
+type Layers = { storms: boolean; properties: boolean }
 
 export default function MapPage() {
-  return (
-    <div className="flex flex-col h-full">
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-vantage-border bg-vantage-surface flex-shrink-0">
-        <Map className="w-4 h-4 text-vantage-yellow" />
-        <span className="text-sm font-medium text-vantage-text">World View</span>
-        <span className="text-vantage-faint text-xs">·</span>
-        <span className="text-vantage-muted text-xs">Storm zones · Property markers · Heatmap overlay</span>
-      </div>
+  const [selectedStorm, setSelectedStorm] = useState<Storm | null>(null)
+  const [layers, setLayers] = useState<Layers>({ storms: true, properties: true })
 
-      {/* Map placeholder */}
-      <div className="flex-1 flex items-center justify-center bg-vantage-black relative overflow-hidden">
-        {/* Grid pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage:
-              'linear-gradient(#8B9CB0 1px, transparent 1px), linear-gradient(90deg, #8B9CB0 1px, transparent 1px)',
-            backgroundSize: '40px 40px',
-          }}
+  return (
+    <div className="relative overflow-hidden" style={{ height: 'calc(100vh - 48px)' }}>
+      {/* Map */}
+      <MapView
+        layers={layers}
+        selectedStormId={selectedStorm?.id ?? null}
+        onStormSelect={setSelectedStorm}
+      />
+
+      {/* Layer toggles */}
+      <LayerControls layers={layers} onChange={setLayers} />
+
+      {/* Storm detail panel */}
+      {selectedStorm && (
+        <StormDetailPanel
+          storm={selectedStorm}
+          onClose={() => setSelectedStorm(null)}
         />
-        <div className="relative z-10 text-center space-y-3">
-          <div className="mx-auto w-16 h-16 rounded-full bg-vantage-card border border-vantage-border flex items-center justify-center">
-            <Map className="w-7 h-7 text-vantage-yellow" />
+      )}
+
+      {/* Legend */}
+      <div className="absolute bottom-4 left-4 z-[1000] bg-vantage-surface/90 backdrop-blur-sm border border-vantage-border rounded-lg px-3 py-2.5 space-y-1.5">
+        <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest">
+          Severity
+        </p>
+        {[
+          { color: '#EF4444', label: '9.0+  Critical' },
+          { color: '#F97316', label: '7.0–9.0  High' },
+          { color: '#F0C020', label: '5.0–7.0  Elevated' },
+        ].map(({ color, label }) => (
+          <div key={label} className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            <span className="text-[11px] font-mono text-vantage-muted">{label}</span>
           </div>
-          <h3 className="text-vantage-text font-semibold">Interactive Map</h3>
-          <p className="text-vantage-muted text-sm max-w-xs">
-            Full-screen Leaflet map with storm zones, affected area overlays, and property
-            markers. Coming in Step 2.
-          </p>
-          <div className="flex items-center justify-center gap-4 pt-2 text-xs text-vantage-faint">
-            <div className="flex items-center gap-1.5"><Layers className="w-3 h-3" /> Storm layers</div>
-            <div className="flex items-center gap-1.5"><ZoomIn className="w-3 h-3" /> Property drill-down</div>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   )
