@@ -7,18 +7,18 @@ import {
   Map,
   CloudLightning,
   Users,
-  Route,
+  MapPin,
   Settings,
   ShieldAlert,
 } from 'lucide-react'
 import clsx from 'clsx'
 
 const NAV = [
-  { href: '/dashboard', label: 'Dashboard',  icon: LayoutDashboard },
-  { href: '/map',       label: 'Map',         icon: Map },
-  { href: '/storms',    label: 'Storms',      icon: CloudLightning },
-  { href: '/leads',     label: 'Leads',       icon: Users },
-  { href: '/routes',    label: 'Routes',      icon: Route },
+  { href: '/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
+  { href: '/map',        label: 'Map',          icon: Map },
+  { href: '/storms',     label: 'Storms',       icon: CloudLightning },
+  { href: '/leads',      label: 'Leads',        icon: Users },
+  { href: '/territories',label: 'Territories',  icon: MapPin },
 ]
 
 const BOTTOM_NAV = [
