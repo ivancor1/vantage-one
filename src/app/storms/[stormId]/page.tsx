@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, CloudLightning, Wind, Home, Hash, MapPin } from 'lucide-react'
 import { MOCK_STORMS, MOCK_PROPERTIES } from '@/lib/mock-data'
-import PropertyCard from '@/components/properties/PropertyCard'
+import StormPropertyList from '@/components/properties/StormPropertyList'
 
 type Props = { params: { stormId: string } }
 
@@ -108,11 +108,7 @@ export default function StormDetailPage({ params }: Props) {
       </div>
 
       {/* Property cards */}
-      <div className="space-y-3">
-        {properties.map((property, i) => (
-          <PropertyCard key={property.id} property={property} rank={i + 1} />
-        ))}
-      </div>
+      <StormPropertyList properties={properties} />
 
     </div>
   )

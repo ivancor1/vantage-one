@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import Image from 'next/image'
 import { ShieldCheck, CalendarDays, Plus } from 'lucide-react'
 import type { Property, LeadStatus } from '@/lib/mock-data'
@@ -22,14 +21,10 @@ function DamageBar({ score }: { score: number }) {
     score >= 8 ? '#EF4444' :
     score >= 6 ? '#F97316' :
     score >= 4 ? '#F0C020' : '#6B7280'
-
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1.5 bg-vantage-border rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, backgroundColor: color }}
-        />
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>
       <span className="text-xs font-mono text-vantage-muted w-7 text-right">{score}</span>
     </div>
@@ -39,13 +34,14 @@ function DamageBar({ score }: { score: number }) {
 type Props = {
   property: Property
   rank: number
+  status: LeadStatus
+  onStatusChange: (status: LeadStatus) => void
+  stormName?: string
 }
 
-export default function PropertyCard({ property, rank }: Props) {
-  const [status, setStatus] = useState<LeadStatus>(property.status)
+export default function PropertyCard({ property, rank, status, onStatusChange, stormName }: Props) {
   const { label: scoreLabel, cls: scoreCls } = leadScoreLabel(property.leadScore)
   const statusMeta = STATUS_META[status]
-
   const streetAddress = property.address.split(',')[0]
   const cityLine = property.address.split(',').slice(1).join(',').trim()
 
@@ -71,9 +67,16 @@ export default function PropertyCard({ property, rank }: Props) {
 
       {/* Main content */}
       <div className="flex-1 min-w-0 px-4 py-3 flex flex-col gap-2.5">
-        {/* Address */}
+        {/* Address + storm badge */}
         <div>
-          <p className="text-sm font-semibold text-vantage-text">{streetAddress}</p>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold text-vantage-text">{streetAddress}</p>
+            {stormName && (
+              <span className="text-[10px] font-mono text-vantage-faint border border-vantage-border rounded px-1.5 py-0.5 flex-shrink-0 whitespace-nowrap">
+                {stormName}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-vantage-muted">{cityLine}</p>
         </div>
 
@@ -87,7 +90,7 @@ export default function PropertyCard({ property, rank }: Props) {
             <CalendarDays className="w-3 h-3" />
             Roof: {property.roofAge} yrs
           </span>
-          <span className="px-1.5 py-0.5 rounded border border-vantage-border text-vantage-muted font-mono text-[10px]">
+          <span className="px-1.5 py-0.5 rounded border border-vantage-border font-mono text-[10px]">
             {property.claimType}
           </span>
         </div>
@@ -99,16 +102,13 @@ export default function PropertyCard({ property, rank }: Props) {
 
         {/* Damage bar */}
         <div>
-          <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1">
-            Damage Score
-          </p>
+          <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1">Damage Score</p>
           <DamageBar score={property.damageScore} />
         </div>
       </div>
 
-      {/* Right panel: score + status + action */}
+      {/* Right panel */}
       <div className="w-[140px] flex-shrink-0 flex flex-col items-center justify-between py-4 px-3 border-l border-vantage-border gap-3">
-        {/* Lead score */}
         <div className="text-center">
           <p className={`text-4xl font-bold font-mono leading-none ${scoreCls}`}>
             {property.leadScore}
@@ -118,15 +118,12 @@ export default function PropertyCard({ property, rank }: Props) {
           </p>
         </div>
 
-        {/* Status selector */}
         <div className="w-full">
-          <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1.5 text-center">
-            Status
-          </p>
+          <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1.5 text-center">Status</p>
           <div className={`w-full px-2 py-1 rounded border text-center ${statusMeta.cls}`}>
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value as LeadStatus)}
+              onChange={(e) => onStatusChange(e.target.value as LeadStatus)}
               className="w-full bg-transparent text-[11px] font-semibold text-center appearance-none cursor-pointer outline-none"
             >
               {STATUS_OPTIONS.map((opt) => (
@@ -138,7 +135,6 @@ export default function PropertyCard({ property, rank }: Props) {
           </div>
         </div>
 
-        {/* Add to route */}
         <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded border border-vantage-yellow/30 text-vantage-yellow text-xs font-semibold hover:bg-vantage-yellow-dim transition-colors">
           <Plus className="w-3 h-3" />
           Add Route
