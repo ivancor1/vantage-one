@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import { Bell, Activity } from 'lucide-react'
+import SupabaseStatus from './SupabaseStatus'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Command Center',
@@ -40,13 +41,15 @@ export default function TopBar() {
       </div>
 
       {/* Right: status chips + alerts */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-status-critical/30 bg-status-critical/10">
           <Activity className="w-3 h-3 text-status-critical animate-pulse" />
           <span className="text-[11px] font-semibold text-status-critical tracking-wide">
             3 ACTIVE STORMS
           </span>
         </div>
+
+        <SupabaseStatus />
 
         <button className="relative p-1.5 rounded hover:bg-white/5 transition-colors text-vantage-muted hover:text-vantage-text">
           <Bell className="w-4 h-4" />
