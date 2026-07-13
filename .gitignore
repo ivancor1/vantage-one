@@ -22,3 +22,7 @@ Thumbs.db
 *.tsbuildinfo
 next-env.d.ts
 node_modules
+
+# Local dev artifacts
+.devserver.log
+.claude/settings.local.json

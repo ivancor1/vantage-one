@@ -1,7 +1,7 @@
 'use client'
 
-import { X, CloudLightning, Wind, Home, Hash } from 'lucide-react'
-import type { Storm } from '@/lib/mock-data'
+import { X, CloudLightning, Wind, FlaskConical, FileText } from 'lucide-react'
+import type { Storm } from '@/lib/types'
 
 function severityBadge(s: number) {
   if (s >= 9) return { label: 'CRITICAL', cls: 'bg-status-critical/15 text-status-critical border-status-critical/30' }
@@ -27,23 +27,21 @@ export default function StormDetailPanel({ storm, onClose }: Props) {
       <div className="flex items-start justify-between px-5 py-4 border-b border-vantage-border">
         <div className="flex flex-col gap-1.5">
           <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest">
-            Storm Event
+            NWS Local Storm Report · WFO {storm.wfo}
           </p>
           <h3 className="text-sm font-semibold text-vantage-text leading-snug">
             {storm.name}
           </h3>
           <div className="flex items-center gap-2">
             <span className="text-xs text-vantage-muted">{storm.location}</span>
-            <span
-              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badge.cls} tracking-wider`}
-            >
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badge.cls} tracking-wider`}>
               {badge.label}
             </span>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="p-1 rounded text-vantage-faint hover:text-vantage-text hover:bg-white/5 transition-colors flex-shrink-0"
+          className="p-1 rounded text-vantage-faint hover:text-vantage-text hover:bg-black/[0.04] transition-colors flex-shrink-0"
         >
           <X className="w-4 h-4" />
         </button>
@@ -55,42 +53,61 @@ export default function StormDetailPanel({ storm, onClose }: Props) {
         <p className="text-sm text-vantage-text font-medium">{dateStr}</p>
       </div>
 
-      {/* Key metrics */}
-      <div className="grid grid-cols-2 border-b border-vantage-border">
-        {[
-          { icon: CloudLightning, label: 'Hail Size',  value: `${storm.hailSize}"`,              color: 'text-status-critical' },
-          { icon: Wind,           label: 'Wind Speed', value: `${storm.windSpeed} mph`,           color: 'text-status-high' },
-          { icon: Hash,           label: 'Severity',   value: storm.severity.toString(),          color: 'text-vantage-yellow' },
-          { icon: Home,           label: 'Est. Homes', value: storm.estimatedHomes.toLocaleString(), color: 'text-vantage-text' },
-        ].map(({ icon: Icon, label, value, color }, i) => (
-          <div
-            key={label}
-            className={`flex flex-col gap-1.5 px-5 py-4 ${i % 2 === 0 ? 'border-r border-vantage-border' : ''} ${i < 2 ? 'border-b border-vantage-border' : ''}`}
-          >
-            <div className="flex items-center gap-1.5">
-              <Icon className={`w-3 h-3 ${color} opacity-60`} />
-              <p className="text-[10px] text-vantage-faint uppercase tracking-wider">{label}</p>
+      {/* NWS official metrics */}
+      <div className="px-5 py-3 border-b border-vantage-border">
+        <p className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest mb-2.5">
+          NWS Official
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {storm.hailSize > 0 && (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1">
+                <CloudLightning className="w-3 h-3 text-status-critical opacity-60" />
+                <p className="text-[10px] text-vantage-faint uppercase tracking-wider">Max Hail</p>
+              </div>
+              <p className="text-lg font-bold font-mono text-status-critical">{storm.hailSize}"</p>
             </div>
-            <p className={`text-lg font-bold font-mono ${color}`}>{value}</p>
+          )}
+          {storm.windSpeed > 0 && (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1">
+                <Wind className="w-3 h-3 text-status-high opacity-60" />
+                <p className="text-[10px] text-vantage-faint uppercase tracking-wider">Max Wind</p>
+              </div>
+              <p className="text-lg font-bold font-mono text-status-high">{storm.windSpeed} mph</p>
+            </div>
+          )}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <FileText className="w-3 h-3 text-vantage-faint opacity-60" />
+              <p className="text-[10px] text-vantage-faint uppercase tracking-wider">Reports</p>
+            </div>
+            <p className="text-lg font-bold font-mono text-vantage-text">{storm.reportCount}</p>
           </div>
-        ))}
+        </div>
       </div>
 
-      {/* Affected zips */}
-      <div className="px-5 py-4 border-b border-vantage-border">
-        <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-2.5">
-          Affected ZIP Codes
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {storm.affectedZips.map((zip) => (
-            <span
-              key={zip}
-              className="text-xs font-mono px-2 py-0.5 rounded bg-vantage-card border border-vantage-border text-vantage-muted"
-            >
-              {zip}
-            </span>
-          ))}
+      {/* Vantage modeled metrics */}
+      <div className="px-5 py-3 border-b border-vantage-border">
+        <div className="flex items-center gap-1.5 mb-2.5">
+          <FlaskConical className="w-3 h-3 text-vantage-yellow opacity-60" />
+          <p className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest">
+            Modeled by Vantage
+          </p>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <p className="text-[10px] text-vantage-faint uppercase tracking-wider">Severity</p>
+            <p className="text-lg font-bold font-mono text-vantage-yellow">{storm.severity}</p>
+          </div>
+          <div className="flex flex-col gap-1">
+            <p className="text-[10px] text-vantage-faint uppercase tracking-wider">Homes in Radius</p>
+            <p className="text-lg font-bold font-mono text-vantage-text">{storm.estimatedHomes.toLocaleString()}</p>
+          </div>
+        </div>
+        <p className="text-[9px] text-vantage-faint mt-2 leading-relaxed">
+          Estimate only. Not an official storm path.
+        </p>
       </div>
 
       {/* CTA */}
@@ -99,7 +116,7 @@ export default function StormDetailPanel({ storm, onClose }: Props) {
           href={`/storms/${storm.id}`}
           className="flex items-center justify-center w-full py-2.5 rounded bg-vantage-yellow text-vantage-black text-sm font-bold tracking-wide hover:bg-vantage-yellow/90 transition-colors"
         >
-          View Affected Properties →
+          View Storm Reports →
         </a>
       </div>
     </div>

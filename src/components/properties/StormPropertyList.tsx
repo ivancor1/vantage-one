@@ -2,7 +2,7 @@
 
 import { useLeadStatuses } from '@/lib/leads-store'
 import PropertyCard from './PropertyCard'
-import type { Property } from '@/lib/mock-data'
+import type { Property } from '@/lib/types'
 
 type Props = { properties: Property[] }
 

@@ -2,16 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Space Grotesk = display/wordmark · Inter = body/UI · JetBrains Mono = kickers/data */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg: #07090C;
-  --surface: #0D1117;
-  --card: #13191F;
-  --border: #1E2A35;
-  --yellow: #F0C020;
-  --text: #E2EAF0;
-  --muted: #8B9CB0;
+  --bg: #eae7e1;
+  --surface: #f7f5f1;
+  --card: #ffffff;
+  --border: #e5e1d9;
+  --ink: #1a1813;
+  --text: #1a1813;
+  --muted: #6c6862;
 }
 
 * {
@@ -21,36 +22,42 @@
 html,
 body {
   height: 100%;
-  background-color: #07090C;
-  color: #E2EAF0;
+  background-color: #eae7e1;
+  color: #1a1813;
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Gamut-style display headings: geometric grotesk, tight tracking */
+h1, h2, h3 {
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #0D1117;
+  background: #eae7e1;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2D3B47;
-  border-radius: 3px;
+  background: #d3cec4;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3D5060;
+  background: #bdb6a9;
 }
 
 /* Selection */
 ::selection {
-  background: rgba(240, 192, 32, 0.25);
-  color: #E2EAF0;
+  background: rgba(26, 24, 19, 0.14);
+  color: #1a1813;
 }
 
-/* ─── Leaflet overrides ──────────────────────────────────────────────────── */
+/* ─── Leaflet overrides (light) ──────────────────────────────────────────── */
 
 /* Storm severity label (permanent tooltip) */
 .vantage-storm-label {
@@ -68,25 +75,25 @@ body {
 
 /* Property hover tooltip */
 .vantage-prop-tooltip {
-  background: #13191F !important;
-  border: 1px solid #1E2A35 !important;
-  border-radius: 6px !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
-  color: #E2EAF0 !important;
+  background: #ffffff !important;
+  border: 1px solid #e5e1d9 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 6px 20px rgba(26, 24, 19, 0.12) !important;
+  color: #1a1813 !important;
   padding: 6px 10px !important;
 }
 .vantage-prop-tooltip::before {
-  border-top-color: #1E2A35 !important;
+  border-top-color: #e5e1d9 !important;
 }
 
-/* Remove default popup close button styling */
+/* Popup */
 .leaflet-popup-content-wrapper {
-  background: #13191F;
-  border: 1px solid #1E2A35;
-  border-radius: 6px;
-  color: #E2EAF0;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  background: #ffffff;
+  border: 1px solid #e5e1d9;
+  border-radius: 8px;
+  color: #1a1813;
+  box-shadow: 0 6px 20px rgba(26, 24, 19, 0.12);
 }
 .leaflet-popup-tip {
-  background: #13191F;
+  background: #ffffff;
 }

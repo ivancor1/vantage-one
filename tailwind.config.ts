@@ -9,30 +9,36 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Light "Gamut" system — monochrome, warm paper neutrals, ink accent.
+        // Token ROLES are preserved from the old dark theme (black = app canvas,
+        // text = foreground, yellow = accent) so the whole app flips at the token
+        // level; only the luminance is inverted.
         vantage: {
-          black:   '#07090C',
-          surface: '#0D1117',
-          card:    '#13191F',
-          border:  '#1E2A35',
-          bright:  '#2D3B47',
-          yellow:  '#F0C020',
-          'yellow-dim': 'rgba(240, 192, 32, 0.12)',
-          'yellow-glow': 'rgba(240, 192, 32, 0.25)',
-          text:    '#E2EAF0',
-          muted:   '#8B9CB0',
-          faint:   '#4A5568',
+          black:   '#eae7e1',            // app canvas (warm light gray)
+          surface: '#f7f5f1',            // raised panels / inputs / overlays / shell
+          card:    '#ffffff',            // cards
+          border:  '#e5e1d9',            // warm hairline
+          bright:  '#d3cec4',            // stronger border / hover
+          yellow:  '#1a1813',            // accent → ink (Gamut is monochrome)
+          'yellow-dim':  'rgba(26, 24, 19, 0.06)',   // subtle ink tint (active chips)
+          'yellow-glow': 'rgba(26, 24, 19, 0.12)',
+          text:    '#1a1813',            // foreground ink
+          muted:   '#6c6862',            // secondary (AA on white)
+          faint:   '#857e72',            // tertiary labels / icons
         },
+        // Semantic status kept (real storm severity) — retuned to AA on white.
         status: {
-          critical: '#EF4444',
-          high:     '#F97316',
-          elevated: '#F0C020',
-          standard: '#6B7280',
-          success:  '#10B981',
+          critical: '#c0392b',
+          high:     '#b45309',
+          elevated: '#a16207',
+          standard: '#6c6862',
+          success:  '#15803d',
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        sans:    ['Inter', 'system-ui', 'sans-serif'],
+        display: ['"Space Grotesk"', 'Inter', 'system-ui', 'sans-serif'],
+        mono:    ['"JetBrains Mono"', 'Fira Code', 'monospace'],
       },
     },
   },

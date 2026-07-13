@@ -2,8 +2,12 @@
 
 import dynamic from 'next/dynamic'
 import { useState } from 'react'
-import { Layers, ZoomIn, ZoomOut } from 'lucide-react'
-import type { Storm } from '@/lib/mock-data'
+import { useRouter } from 'next/navigation'
+import { Layers } from 'lucide-react'
+import type { Storm } from '@/lib/types'
+import { useStorms } from '@/lib/storm-api'
+import { useTerritoriesStore } from '@/lib/territories'
+import { useLeads } from '@/lib/leads-api'
 import LayerControls from '@/components/map/LayerControls'
 import StormDetailPanel from '@/components/map/StormDetailPanel'
 
@@ -19,25 +23,36 @@ const MapView = dynamic(() => import('@/components/map/MapView'), {
   ),
 })
 
-type Layers = { storms: boolean; properties: boolean }
+type LayerState = { storms: boolean }
 
 export default function MapPage() {
   const [selectedStorm, setSelectedStorm] = useState<Storm | null>(null)
-  const [layers, setLayers] = useState<Layers>({ storms: true, properties: true })
+  const [layers, setLayers] = useState<LayerState>({ storms: true })
+  const { storms } = useStorms()
+  const { territories } = useTerritoriesStore()
+  const { leads } = useLeads()
+  const router = useRouter()
+
+  const analyzedLeads = leads.filter((l) => l.visualRoofScore != null)
+
+  function handleLeadClick(leadId: string) {
+    router.push(`/leads?highlight=${leadId}`)
+  }
 
   return (
     <div className="relative overflow-hidden" style={{ height: 'calc(100vh - 48px)' }}>
-      {/* Map */}
       <MapView
+        storms={storms}
+        territories={territories}
+        analyzedLeads={analyzedLeads}
         layers={layers}
         selectedStormId={selectedStorm?.id ?? null}
         onStormSelect={setSelectedStorm}
+        onLeadClick={handleLeadClick}
       />
 
-      {/* Layer toggles */}
       <LayerControls layers={layers} onChange={setLayers} />
 
-      {/* Storm detail panel */}
       {selectedStorm && (
         <StormDetailPanel
           storm={selectedStorm}
@@ -45,7 +60,6 @@ export default function MapPage() {
         />
       )}
 
-      {/* Legend */}
       <div className="absolute bottom-4 left-4 z-[1000] bg-vantage-surface/90 backdrop-blur-sm border border-vantage-border rounded-lg px-3 py-2.5 space-y-1.5">
         <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest">
           Severity

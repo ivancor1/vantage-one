@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { Bell, Activity } from 'lucide-react'
 import SupabaseStatus from './SupabaseStatus'
+import { useStorms } from '@/lib/storm-api'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Command Center',
@@ -23,6 +24,7 @@ function resolveTitle(pathname: string) {
 export default function TopBar() {
   const pathname = usePathname()
   const title = resolveTitle(pathname)
+  const { storms, loading } = useStorms()
 
   return (
     <header className="h-12 flex items-center justify-between px-5 bg-vantage-surface border-b border-vantage-border flex-shrink-0">
@@ -42,16 +44,18 @@ export default function TopBar() {
 
       {/* Right: status chips + alerts */}
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-status-critical/30 bg-status-critical/10">
-          <Activity className="w-3 h-3 text-status-critical animate-pulse" />
-          <span className="text-[11px] font-semibold text-status-critical tracking-wide">
-            3 ACTIVE STORMS
-          </span>
-        </div>
+        {(loading || storms.length > 0) && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-status-critical/30 bg-status-critical/10">
+            <Activity className="w-3 h-3 text-status-critical animate-pulse" />
+            <span className="text-[11px] font-semibold text-status-critical tracking-wide">
+              {loading ? '— STORMS' : `${storms.length} ACTIVE STORM${storms.length !== 1 ? 'S' : ''}`}
+            </span>
+          </div>
+        )}
 
         <SupabaseStatus />
 
-        <button className="relative p-1.5 rounded hover:bg-white/5 transition-colors text-vantage-muted hover:text-vantage-text">
+        <button className="relative p-1.5 rounded hover:bg-black/[0.04] transition-colors text-vantage-muted hover:text-vantage-text">
           <Bell className="w-4 h-4" />
           <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-vantage-yellow" />
         </button>

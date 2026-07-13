@@ -1,8 +1,7 @@
 'use client'
 
-import Image from 'next/image'
-import { ShieldCheck, CalendarDays, Plus } from 'lucide-react'
-import type { Property, LeadStatus } from '@/lib/mock-data'
+import { Home, ShieldCheck, CalendarDays, Plus, MapPin } from 'lucide-react'
+import type { Property, LeadStatus } from '@/lib/types'
 import { leadScoreLabel, STATUS_META } from '@/lib/lead-scoring'
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
@@ -53,17 +52,22 @@ export default function PropertyCard({ property, rank, status, onStatusChange, s
         <span className="text-xs font-mono text-vantage-faint">{rank}</span>
       </div>
 
-      {/* Satellite image */}
-      <div className="w-[140px] flex-shrink-0 relative bg-vantage-surface">
-        <Image
-          src={property.satelliteUrl}
-          alt={streetAddress}
-          fill
-          className="object-cover opacity-80"
-          unoptimized
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent to-vantage-card/30" />
-      </div>
+      {/* Image or placeholder */}
+      {property.satelliteUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <div className="w-[120px] flex-shrink-0 relative bg-vantage-surface overflow-hidden">
+          <img
+            src={property.satelliteUrl}
+            alt={streetAddress}
+            className="absolute inset-0 w-full h-full object-cover opacity-80"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-vantage-card/30" />
+        </div>
+      ) : (
+        <div className="w-[80px] flex-shrink-0 bg-vantage-surface flex items-center justify-center border-r border-vantage-border">
+          <Home className="w-5 h-5 text-vantage-faint" />
+        </div>
+      )}
 
       {/* Main content */}
       <div className="flex-1 min-w-0 px-4 py-3 flex flex-col gap-2.5">
@@ -77,34 +81,57 @@ export default function PropertyCard({ property, rank, status, onStatusChange, s
               </span>
             )}
           </div>
-          <p className="text-xs text-vantage-muted">{cityLine}</p>
+          {cityLine && <p className="text-xs text-vantage-muted">{cityLine}</p>}
         </div>
 
         {/* Meta row */}
-        <div className="flex items-center gap-4 text-xs text-vantage-faint">
-          <span className="flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3" />
-            {property.insuranceCarrier}
-          </span>
+        <div className="flex items-center gap-4 text-xs text-vantage-faint flex-wrap">
+          {property.insuranceCarrier ? (
+            <span className="flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" />
+              {property.insuranceCarrier}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 opacity-50">
+              <ShieldCheck className="w-3 h-3" />
+              Insurance unknown
+            </span>
+          )}
           <span className="flex items-center gap-1">
             <CalendarDays className="w-3 h-3" />
-            Roof: {property.roofAge} yrs
+            {property.roofAge != null ? `Roof: ~${property.roofAge} yrs` : 'Roof age unknown'}
           </span>
-          <span className="px-1.5 py-0.5 rounded border border-vantage-border font-mono text-[10px]">
-            {property.claimType}
-          </span>
+          {property.claimType && (
+            <span className="px-1.5 py-0.5 rounded border border-vantage-border font-mono text-[10px]">
+              {property.claimType}
+            </span>
+          )}
+          {property.distanceKm != null && (
+            <span className="flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              {property.distanceKm} km from centroid
+            </span>
+          )}
         </div>
 
-        {/* AI notes */}
-        <p className="text-xs text-vantage-muted leading-relaxed line-clamp-2">
-          {property.aiNotes}
-        </p>
+        {/* Notes or source attribution */}
+        {property.aiNotes ? (
+          <p className="text-xs text-vantage-muted leading-relaxed line-clamp-2">
+            {property.aiNotes}
+          </p>
+        ) : (
+          <p className="text-[10px] text-vantage-faint font-mono">
+            Address: {property.dataSource ?? 'Unknown source'} · Lead score: Vantage model (proximity + severity + age)
+          </p>
+        )}
 
-        {/* Damage bar */}
-        <div>
-          <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1">Damage Score</p>
-          <DamageBar score={property.damageScore} />
-        </div>
+        {/* Damage bar — only if we have the data */}
+        {property.damageScore != null && (
+          <div>
+            <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1">Damage Score</p>
+            <DamageBar score={property.damageScore} />
+          </div>
+        )}
       </div>
 
       {/* Right panel */}
@@ -116,6 +143,7 @@ export default function PropertyCard({ property, rank, status, onStatusChange, s
           <p className={`text-[10px] font-bold tracking-widest mt-1 ${scoreCls}`}>
             {scoreLabel}
           </p>
+          <p className="text-[9px] text-vantage-faint mt-0.5 font-mono">Vantage score</p>
         </div>
 
         <div className="w-full">

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, isSupabaseReady } from './supabase'
-import type { LeadStatus } from './mock-data'
+import type { LeadStatus } from './types'
 
 const LS_KEY = 'vantage_lead_statuses'
 

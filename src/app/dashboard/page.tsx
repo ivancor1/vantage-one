@@ -2,27 +2,28 @@
 
 import { Map, CloudLightning, Users } from 'lucide-react'
 import { useTerritoriesStore } from '@/lib/territories'
-import { MOCK_STORMS, MOCK_PROPERTIES } from '@/lib/mock-data'
+import { useStorms } from '@/lib/storm-api'
 import Link from 'next/link'
 
-const RECENT_STORMS = MOCK_STORMS
-  .sort((a, b) => b.severity - a.severity)
-  .map((storm) => ({
-    ...storm,
-    dateFormatted: new Date(storm.date).toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric',
-    }),
-    badge: storm.severity >= 9 ? 'CRITICAL' : storm.severity >= 7 ? 'HIGH' : 'ELEVATED',
-    badgeColor:
-      storm.severity >= 9
-        ? 'bg-status-critical/15 text-status-critical border-status-critical/30'
-        : storm.severity >= 7
-        ? 'bg-status-high/15 text-status-high border-status-high/30'
-        : 'bg-vantage-yellow-dim text-vantage-yellow border-vantage-yellow/30',
-  }))
+function severityBadge(s: number) {
+  if (s >= 9) return { label: 'CRITICAL', cls: 'bg-status-critical/15 text-status-critical border-status-critical/30' }
+  if (s >= 7) return { label: 'HIGH',     cls: 'bg-status-high/15 text-status-high border-status-high/30' }
+  return          { label: 'ELEVATED',   cls: 'bg-vantage-yellow-dim text-vantage-yellow border-vantage-yellow/30' }
+}
 
 export default function DashboardPage() {
   const { territories, hydrated } = useTerritoriesStore()
+  const { storms, loading } = useStorms()
+
+  const recentStorms = [...storms]
+    .sort((a, b) => b.severity - a.severity)
+    .map((storm) => ({
+      ...storm,
+      dateFormatted: new Date(storm.date).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+      }),
+      badge: severityBadge(storm.severity),
+    }))
 
   const stats = [
     {
@@ -35,7 +36,7 @@ export default function DashboardPage() {
     },
     {
       label: 'Active Storms',
-      value: String(MOCK_STORMS.length),
+      value: loading ? '—' : String(storms.length),
       icon: CloudLightning,
       color: 'text-status-critical',
       border: 'border-status-critical/20',
@@ -43,7 +44,7 @@ export default function DashboardPage() {
     },
     {
       label: 'High-Priority Leads',
-      value: String(MOCK_PROPERTIES.filter((p) => p.leadScore >= 80).length),
+      value: '—',
       icon: Users,
       color: 'text-status-high',
       border: 'border-status-high/20',
@@ -83,42 +84,54 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        <div className="divide-y divide-vantage-border">
-          {RECENT_STORMS.map((storm) => (
-            <Link
-              key={storm.id}
-              href={`/storms/${storm.id}`}
-              className="flex items-center justify-between px-6 py-5 hover:bg-white/[0.02] transition-colors"
-            >
-              <div className="flex flex-col gap-1.5 min-w-0">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-sm font-semibold text-vantage-text">{storm.name}</span>
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${storm.badgeColor} tracking-wider`}>
-                    {storm.badge}
-                  </span>
+        {loading ? (
+          <div className="px-6 py-10 text-center text-vantage-faint text-xs font-mono">
+            FETCHING LIVE DATA...
+          </div>
+        ) : recentStorms.length === 0 ? (
+          <div className="px-6 py-10 text-center text-vantage-faint text-xs">
+            No storm events in the last 72 hours.
+          </div>
+        ) : (
+          <div className="divide-y divide-vantage-border">
+            {recentStorms.slice(0, 8).map((storm) => (
+              <Link
+                key={storm.id}
+                href={`/storms/${storm.id}`}
+                className="flex items-center justify-between px-6 py-5 hover:bg-black/[0.035] transition-colors"
+              >
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-sm font-semibold text-vantage-text">{storm.name}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${storm.badge.cls} tracking-wider`}>
+                      {storm.badge.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-vantage-muted">
+                    {storm.location} · {storm.dateFormatted}
+                  </p>
                 </div>
-                <p className="text-xs text-vantage-muted">
-                  {storm.location} · {storm.dateFormatted}
-                </p>
-              </div>
 
-              <div className="flex items-center gap-8 flex-shrink-0 pl-6">
-                <div className="text-right">
-                  <p className="text-[11px] text-vantage-faint mb-0.5">Hail</p>
-                  <p className="text-sm font-mono font-semibold text-vantage-text">{storm.hailSize}"</p>
+                <div className="flex items-center gap-8 flex-shrink-0 pl-6">
+                  {storm.hailSize > 0 && (
+                    <div className="text-right">
+                      <p className="text-[11px] text-vantage-faint mb-0.5">Hail</p>
+                      <p className="text-sm font-mono font-semibold text-vantage-text">{storm.hailSize}"</p>
+                    </div>
+                  )}
+                  <div className="text-right">
+                    <p className="text-[11px] text-vantage-faint mb-0.5">Severity</p>
+                    <p className="text-sm font-mono font-bold text-vantage-yellow">{storm.severity}</p>
+                  </div>
+                  <div className="text-right hidden md:block">
+                    <p className="text-[11px] text-vantage-faint mb-0.5">LSR Reports</p>
+                    <p className="text-sm font-mono font-semibold text-vantage-text">{storm.reportCount}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[11px] text-vantage-faint mb-0.5">Severity</p>
-                  <p className="text-sm font-mono font-bold text-vantage-yellow">{storm.severity}</p>
-                </div>
-                <div className="text-right hidden md:block">
-                  <p className="text-[11px] text-vantage-faint mb-0.5">Est. Homes</p>
-                  <p className="text-sm font-mono font-semibold text-vantage-text">{storm.estimatedHomes.toLocaleString()}</p>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
     </div>

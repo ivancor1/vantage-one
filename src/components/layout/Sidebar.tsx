@@ -10,6 +10,8 @@ import {
   MapPin,
   Settings,
   ShieldAlert,
+  Trash2,
+  Layers,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -18,7 +20,9 @@ const NAV = [
   { href: '/map',        label: 'Map',          icon: Map },
   { href: '/storms',     label: 'Storms',       icon: CloudLightning },
   { href: '/leads',      label: 'Leads',        icon: Users },
-  { href: '/territories',label: 'Territories',  icon: MapPin },
+  { href: '/territories',      label: 'Territories',      icon: MapPin },
+  { href: '/shingle-analysis', label: 'Shingle Analysis', icon: Layers },
+  { href: '/trash',            label: 'Trash',            icon: Trash2 },
 ]
 
 const BOTTOM_NAV = [
@@ -35,9 +39,9 @@ export default function Sidebar() {
     <aside className="flex flex-col w-[220px] min-h-screen bg-vantage-surface border-r border-vantage-border flex-shrink-0">
       {/* Wordmark */}
       <div className="flex items-center gap-2.5 px-5 py-5 border-b border-vantage-border">
-        <ShieldAlert className="w-5 h-5 text-vantage-yellow flex-shrink-0" />
-        <span className="text-vantage-yellow font-bold tracking-[0.18em] text-sm uppercase">
-          VANTAGE
+        <ShieldAlert className="w-5 h-5 text-vantage-text flex-shrink-0" strokeWidth={2.25} />
+        <span className="font-display text-vantage-text font-semibold tracking-[-0.02em] text-lg">
+          Vantage
         </span>
       </div>
 
@@ -51,7 +55,7 @@ export default function Sidebar() {
               'flex items-center gap-3 px-3 py-2.5 rounded text-sm font-medium transition-colors',
               isActive(href)
                 ? 'bg-vantage-yellow-dim text-vantage-yellow border-l-2 border-vantage-yellow pl-[10px]'
-                : 'text-vantage-muted hover:text-vantage-text hover:bg-white/5 border-l-2 border-transparent pl-[10px]'
+                : 'text-vantage-muted hover:text-vantage-text hover:bg-black/[0.04] border-l-2 border-transparent pl-[10px]'
             )}
           >
             <Icon className="w-4 h-4 flex-shrink-0" />
@@ -70,7 +74,7 @@ export default function Sidebar() {
               'flex items-center gap-3 px-3 py-2.5 rounded text-sm font-medium transition-colors border-l-2',
               isActive(href)
                 ? 'bg-vantage-yellow-dim text-vantage-yellow border-vantage-yellow pl-[10px]'
-                : 'text-vantage-muted hover:text-vantage-text hover:bg-white/5 border-transparent pl-[10px]'
+                : 'text-vantage-muted hover:text-vantage-text hover:bg-black/[0.04] border-transparent pl-[10px]'
             )}
           >
             <Icon className="w-4 h-4 flex-shrink-0" />
