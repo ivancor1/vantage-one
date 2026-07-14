@@ -30,11 +30,12 @@ export async function POST(
     return NextResponse.json({ ok: false, error: 'Storm not found — open the Storms tab once to sync, then retry' }, { status: 404 })
   }
 
-  // One territory per storm (unique on type+value) — re-clicks reuse it
+  // One territory per storm (unique on type+value) — re-clicks reuse it, and a previously
+  // trashed storm-territory is resurrected (deleted_at cleared) rather than staying invisible
   const { data: territory, error: tErr } = await supabase
     .from('territories')
     .upsert(
-      { type: 'city', value: storm.name, place_name: storm.location, radius_miles: RADIUS_MILES, lat: storm.lat, lng: storm.lng },
+      { type: 'city', value: storm.name, place_name: storm.location, radius_miles: RADIUS_MILES, lat: storm.lat, lng: storm.lng, deleted_at: null },
       { onConflict: 'type,value' }
     )
     .select('id')

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, CloudLightning, Wind, Hash, MapPin, FileText, FlaskConical } from 'lucide-react'
 import { fetchStorms } from '@/lib/iem'
 import PropertyList from '@/components/properties/PropertyList'
+import FindLeadsButton from '@/components/storms/FindLeadsButton'
 
 export const revalidate = 1800
 
@@ -67,6 +68,7 @@ export default async function StormDetailPage({ params }: Props) {
                   <p className="text-sm text-vantage-muted">{dateStr}</p>
                 </div>
               </div>
+              <FindLeadsButton stormId={storm.id} />
             </div>
 
             {/* Two-section metrics row */}

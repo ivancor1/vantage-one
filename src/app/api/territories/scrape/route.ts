@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
         radar_hail_in: storm?.radar_hail_in ?? null,
         nearest_report_km: storm?.nearest_report_km ?? null,
         inside_hail_swath: storm?.inside_hail_swath ?? null,
+        deleted_at: null, // a fresh scan resurrects previously trashed rows for this area
       }
     })
 

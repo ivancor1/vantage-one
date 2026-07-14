@@ -7,6 +7,7 @@ import clsx from 'clsx'
 import type { LeadStatus } from '@/lib/types'
 import { useLeads } from '@/lib/leads-api'
 import { supabase } from '@/lib/supabase'
+import { useStormLeadStates } from '@/lib/storm-leads'
 import { STATUS_META } from '@/lib/lead-scoring'
 import LeadCard, { LeadListHeader } from '@/components/leads/LeadCard'
 import Link from 'next/link'
@@ -51,6 +52,20 @@ function LeadsPageInner() {
     const t = searchParams.get('territory')
     if (t) setTerritory(t)
   }, [searchParams])
+
+  // Arriving mid-scan from a storm page (?storm=): show a live "finding homes…" banner,
+  // let the user browse other territories, then drop into the new territory when it lands.
+  const stormParam = searchParams.get('storm')
+  const genStates = useStormLeadStates()
+  const scanState = stormParam ? genStates[stormParam] : undefined
+  const landedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!stormParam || scanState?.status !== 'done') return
+    if (landedRef.current === stormParam) return
+    landedRef.current = stormParam
+    reload().then(() => setTerritory(scanState.territoryId))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stormParam, scanState])
 
   // The most sellable filter there is: homes where two independent government sources
   // (NOAA radar + NWS spotters) both confirm hail
@@ -373,6 +388,26 @@ function LeadsPageInner() {
           </div>
         </div>
       </div>
+
+      {/* Live scan banner — arriving from a storm's "Find leads" */}
+      {stormParam && scanState?.status === 'running' && (
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-vantage-card border border-vantage-yellow/40">
+          <Loader2 className="w-4 h-4 animate-spin text-vantage-yellow flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-vantage-text">Finding homes under this storm…</p>
+            <p className="text-xs text-vantage-muted mt-0.5">
+              Scraping real addressed buildings near the hail reports and scoring each against radar + spotter
+              evidence (~1 min). Browse your other territories below — this will drop in automatically.
+            </p>
+          </div>
+        </div>
+      )}
+      {stormParam && scanState?.status === 'error' && (
+        <div className="p-4 rounded-lg bg-vantage-card border border-status-critical/40">
+          <p className="text-sm font-semibold text-status-critical">Couldn&apos;t find homes for this storm</p>
+          <p className="text-xs text-vantage-muted mt-0.5">{scanState.message}</p>
+        </div>
+      )}
 
       {/* Territory tabs */}
       {!loading && territories.length > 0 && (
