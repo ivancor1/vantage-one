@@ -33,8 +33,6 @@ export default function MapPage() {
   const { leads } = useLeads()
   const router = useRouter()
 
-  const analyzedLeads = leads.filter((l) => l.visualRoofScore != null)
-
   function handleLeadClick(leadId: string) {
     router.push(`/leads?highlight=${leadId}`)
   }
@@ -44,7 +42,7 @@ export default function MapPage() {
       <MapView
         storms={storms}
         territories={territories}
-        analyzedLeads={analyzedLeads}
+        leads={leads}
         layers={layers}
         selectedStormId={selectedStorm?.id ?? null}
         onStormSelect={setSelectedStorm}

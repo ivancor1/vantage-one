@@ -105,3 +105,17 @@ h1, h2, h3 {
 .leaflet-popup-tip {
   background: #ffffff;
 }
+
+/* Lead row reveal — the top rows fade+rise in when a territory's list first renders,
+   so a pre-built scrape visibly "populates" on the Find-Leads click. Plays once per mount
+   (never re-fires on re-render/batch-assess). Respects reduced-motion. */
+@keyframes leadRowIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.lead-row-in {
+  animation: leadRowIn 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lead-row-in { animation: none; }
+}

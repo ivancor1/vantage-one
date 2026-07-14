@@ -3,6 +3,9 @@ import { supabase, isSupabaseReady } from '@/lib/supabase'
 import { distKm } from '@/lib/hail'
 import type { LsrReport } from '@/lib/types'
 
+// Overpass scrapes can run long; give the function headroom on Vercel (Hobby caps at 60s).
+export const maxDuration = 60
+
 // Storm-first lead generation: turn a storm from the feed into a worked lead list.
 // Picks the storm's strongest hail-report locations, scrapes real addressed homes around
 // them (reusing the territory scrape pipeline, which also applies radar+spotter hail

@@ -23,7 +23,7 @@ export default function TerritoriesPage() {
   const { storms } = useStorms()
   const [type, setType] = useState<TerritoryType>('zip')
   const [value, setValue] = useState('')
-  const [radius, setRadius] = useState(3)
+  const [radius, setRadius] = useState(2)
   const [error, setError] = useState('')
   const [adding, setAdding] = useState(false)
 
@@ -125,7 +125,7 @@ export default function TerritoriesPage() {
           />
           <div className="flex justify-between text-[10px] text-vantage-faint font-mono">
             <span>1 mi</span>
-            <span className="text-vantage-faint/60">up to ~120 homes per scan · widen later from the Leads page</span>
+            <span className="text-vantage-faint/60">every addressed home in the radius · 2 mi ≈ 800 · widen later from the Leads page</span>
             <span>10 mi</span>
           </div>
         </div>

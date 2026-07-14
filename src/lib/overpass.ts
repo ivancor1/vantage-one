@@ -82,7 +82,9 @@ async function fetchOverpass(query: string): Promise<{ elements: OverpassElement
     try {
       const res = await fetch(`${OVERPASS_ENDPOINTS[attempt]}?data=${encodeURIComponent(query)}`, {
         headers: { 'Accept': '*/*', 'User-Agent': 'vantage-app/1.0' },
-        signal: AbortSignal.timeout(45_000),
+        // Must exceed the server-side [timeout:60] so the server's own timeout (and our
+        // mirror fallback) fires before the client aborts.
+        signal: AbortSignal.timeout(75_000),
       })
       if (!res.ok) { lastErr = new Error(`Overpass ${res.status}`); continue }
       const data = await res.json()
@@ -194,13 +196,18 @@ export async function fetchBuildingsInTerritory(
   const queryRadius = Math.min(radiusMeters, 16093)
   const radiusKm = queryRadius / 1000
 
-  // `out geom` returns way geometry so we can measure each building footprint (roof size)
-  const query = `[out:json][timeout:30];
+  // `out center` returns just a centroid per building — light enough to pull EVERY addressed
+  // home in a ~3 mi territory (~1.8k) in one shot. `out geom` (full polygons, needed for the
+  // footprint/roofing-squares estimate) is ~20× heavier and stalls the public servers past
+  // ~400 homes, which is what made the map look sparse and qt-lopsided. Density is the point
+  // here; footprint is dropped for territory scrapes. Ceiling is OSM address coverage
+  // (~60–70 addressed homes/sq mi in most US suburbs).
+  const query = `[out:json][timeout:60];
 (
   way["building"]["addr:housenumber"]["addr:street"](around:${queryRadius},${lat},${lng});
   node["building"]["addr:housenumber"]["addr:street"](around:${queryRadius},${lat},${lng});
 );
-out geom qt 120;`
+out center qt 2000;`
 
   const { elements } = await fetchOverpass(query)
   const currentYear = new Date().getFullYear()

@@ -12,11 +12,13 @@ function severityColor(s: number) {
   return '#F0C020'
 }
 
-function roofScoreColor(score: number) {
-  if (score >= 70) return '#EF4444'
-  if (score >= 50) return '#F97316'
-  if (score >= 30) return '#F0C020'
-  return '#4ADE80'
+// Colour every home by its lead score (HIGH/ELEVATED/… bands). Un-assessed homes still
+// show — they're real door-knockable addresses, just not roof-read yet.
+function leadColor(score: number) {
+  if (score >= 65) return '#EF4444' // HIGH / CRITICAL
+  if (score >= 50) return '#F97316' // ELEVATED
+  if (score >= 40) return '#F0C020'
+  return '#9ca3af'                   // STANDARD — muted grey
 }
 
 // Tracks zoom level; must live inside MapContainer
@@ -29,7 +31,7 @@ function ZoomTracker({ onChange }: { onChange: (z: number) => void }) {
 type Props = {
   storms: Storm[]
   territories: Territory[]
-  analyzedLeads: Lead[]
+  leads: Lead[]   // ALL leads in view (assessed or not) — every real addressed home
   layers: { storms: boolean }
   selectedStormId: string | null
   onStormSelect: (storm: Storm) => void
@@ -39,7 +41,7 @@ type Props = {
 // Zoom threshold: above this, houses take priority; below, storms/territories do
 const HOUSE_PRIORITY_ZOOM = 11
 
-export default function MapView({ storms, territories, analyzedLeads, layers, selectedStormId, onStormSelect, onLeadClick }: Props) {
+export default function MapView({ storms, territories, leads, layers, selectedStormId, onStormSelect, onLeadClick }: Props) {
   const [zoom, setZoom] = useState(5)
   const housePriority = zoom >= HOUSE_PRIORITY_ZOOM
 
@@ -49,6 +51,9 @@ export default function MapView({ storms, territories, analyzedLeads, layers, se
       zoom={5}
       className="h-full w-full"
       zoomControl={false}
+      // Canvas renderer: ~900 lead dots draw on one canvas instead of 900 SVG paths —
+      // much smoother pan/zoom, and it sidesteps the per-path Leaflet tooltip race.
+      preferCanvas
       style={{ background: '#eae7e1' }}
     >
       <TileLayer
@@ -109,10 +114,11 @@ export default function MapView({ storms, territories, analyzedLeads, layers, se
         )
       })}
 
-      {/* Lead dots — in markerPane (z-index 600) so always above overlay circles (z-index 400) */}
-      {analyzedLeads.map((lead) => {
-        const color = roofScoreColor(lead.visualRoofScore!)
-        const radius = zoom >= 14 ? 9 : zoom >= 12 ? 7 : 5
+      {/* Lead dots — every home in view. markerPane (z 600) keeps them above overlay circles. */}
+      {leads.map((lead) => {
+        const color = leadColor(lead.leadScore)
+        const radius = zoom >= 14 ? 8 : zoom >= 12 ? 6 : 4
+        const assessed = lead.visualRoofScore != null
         return (
           <CircleMarker
             key={lead.id}
@@ -122,14 +128,15 @@ export default function MapView({ storms, territories, analyzedLeads, layers, se
             pathOptions={{
               color,
               fillColor: color,
-              fillOpacity: 0.9,
-              weight: 1.5,
+              fillOpacity: assessed ? 0.95 : 0.5, // roof-assessed homes read solid; others softer
+              weight: assessed ? 1.5 : 1,
             }}
             eventHandlers={{ click: () => onLeadClick(lead.id) }}
           >
             <Tooltip direction="top" offset={[0, -radius - 2]}>
               <span className="text-xs font-mono">
-                {lead.address.split(',')[0]} · AI score {lead.visualRoofScore}
+                {lead.address.split(',')[0]} · score {lead.leadScore}
+                {assessed ? ' · roof read' : ''}
               </span>
             </Tooltip>
           </CircleMarker>

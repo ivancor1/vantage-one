@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { CloudLightning, ArrowRight, Users, Loader2, Check } from 'lucide-react'
 import { useStorms } from '@/lib/storm-api'
-import { useStormLeadStates, startFindLeads, hydrateStormLeadStates } from '@/lib/storm-leads'
+import { useStormLeadStates, startFindLeads } from '@/lib/storm-leads'
 
 function severityBadge(s: number) {
   if (s >= 9) return { label: 'CRITICAL', cls: 'bg-status-critical/15 text-status-critical border-status-critical/30' }
@@ -19,11 +18,10 @@ export default function StormsPage() {
   // Module-scoped store: state survives tab switches; fetch keeps running in background
   const genStates = useStormLeadStates()
 
-  // After a refresh, restore "N leads found" for storms that already have lead sets
-  useEffect(() => {
-    if (storms.length) hydrateStormLeadStates(storms.map((s) => ({ id: s.id, name: s.name })))
-  }, [storms])
-
+  // NOTE: we intentionally do NOT restore "N leads found" from the DB on load. Every storm
+  // shows its "Find leads in this area" CTA until you click it this session — so a pre-built
+  // territory (e.g. the demo storm) still presents the button, and clicking it returns the
+  // existing leads instantly. A page refresh resets the CTA, keeping the flow repeatable.
   function findLeads(e: React.MouseEvent, stormId: string) {
     e.preventDefault()
     e.stopPropagation()

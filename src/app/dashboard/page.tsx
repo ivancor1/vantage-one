@@ -118,7 +118,7 @@ export default function DashboardPage() {
             <MapView
               storms={storms}
               territories={territories}
-              analyzedLeads={[]}
+              leads={[]}
               layers={{ storms: true }}
               selectedStormId={null}
               onStormSelect={() => {}}

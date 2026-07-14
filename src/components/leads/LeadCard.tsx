@@ -138,7 +138,7 @@ export default function LeadCard({ lead, rank, onStatusChange, analyzing, onAnal
 
         {lead.satelliteUrl && imgOk ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={lead.satelliteUrl} alt="" onError={() => setImgOk(false)} className="w-11 h-11 rounded object-cover border border-vantage-border" />
+          <img src={lead.satelliteUrl} alt="" loading="lazy" onError={() => setImgOk(false)} className="w-11 h-11 rounded object-cover border border-vantage-border" />
         ) : (
           <span className="w-11 h-11 rounded bg-vantage-surface border border-vantage-border flex items-center justify-center">
             <Home className="w-4 h-4 text-vantage-faint" />

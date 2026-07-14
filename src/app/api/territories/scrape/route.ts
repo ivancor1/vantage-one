@@ -6,6 +6,9 @@ import { computeCompositeScore } from '@/lib/lead-scoring'
 import { interpolateHail, fetchRadarHail, bboxAround, stormDateRange, distKm, type HailPoint } from '@/lib/hail'
 import type { LsrReport } from '@/lib/types'
 
+// Overpass + enrichment can run long; give the function headroom on Vercel (Hobby caps at 60s).
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null) as {
     territoryId: string

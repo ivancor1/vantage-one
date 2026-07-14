@@ -92,7 +92,12 @@ function LeadsPageInner() {
     }, 100)
   }, [searchParams, hydrated])
 
-  const displayLeads = localLeads ?? leads
+  // While a storm scan is "running", hide its territory so its lead count can't leak into the
+  // tabs / All view before the reveal — it should feel like the homes are being found live.
+  const scanningTerritoryId = scanState?.status === 'running' ? scanState.territoryId : null
+  const displayLeads = scanningTerritoryId
+    ? (localLeads ?? leads).filter((l) => l.territoryId !== scanningTerritoryId)
+    : (localLeads ?? leads)
 
   function handleAnalyze(id: string) {
     setAnalyzingIds((prev) => new Set(prev).add(id))
@@ -111,13 +116,17 @@ function LeadsPageInner() {
     })
   }
 
-  // Batch: analyze every unanalyzed roof in the selected territory tab, pooled so cards fill in live.
-  // Reuses the existing per-lead endpoint (gpt-4o-mini vision) — ~$0.002/roof.
+  // Batch: assess a FIXED top-N of the highest-scoring un-read roofs in the selected tab —
+  // NOT the whole territory (800+ would be slow, costly, and never "finish" on camera).
+  // The count is locked when you click, so a still-running scrape can't grow the batch.
+  // Pooled so cards fill in live. Per-lead endpoint (gpt-4o-mini vision) — ~$0.002/roof.
+  const ASSESS_BATCH = 30
   async function analyzeAll() {
     if (batch.running) return
-    const targets = (localLeads ?? leads).filter(
-      (l) => (territory === 'all' || l.territoryId === territory) && l.visualRoofScore == null
-    )
+    const targets = (localLeads ?? leads)
+      .filter((l) => (territory === 'all' || l.territoryId === territory) && l.visualRoofScore == null)
+      .sort((a, b) => b.leadScore - a.leadScore)
+      .slice(0, ASSESS_BATCH)
     if (!targets.length) return
     setBatch({ running: true, done: 0, total: targets.length })
     const queue = [...targets]
@@ -158,8 +167,9 @@ function LeadsPageInner() {
   // Apply territory filter first, then status filter
   const byTerritory = territory === 'all' ? displayLeads : displayLeads.filter((l) => l.territoryId === territory)
 
-  // Batch-assess button reflects only the selected territory tab
+  // Batch-assess button reflects only the selected territory tab, capped at the batch size
   const unanalyzedCount = byTerritory.filter((l) => l.visualRoofScore == null).length
+  const assessBatchCount = Math.min(unanalyzedCount, ASSESS_BATCH)
 
   const counts: Record<string, number> = { all: byTerritory.length }
   for (const lead of byTerritory) {
@@ -308,7 +318,7 @@ function LeadsPageInner() {
                 {batch.running ? (
                   <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Assessing roofs… {batch.done}/{batch.total}</>
                 ) : (
-                  <><Sparkles className="w-3.5 h-3.5" /> Assess all {unanalyzedCount} roofs</>
+                  <><Sparkles className="w-3.5 h-3.5" /> Assess top {assessBatchCount} roofs</>
                 )}
               </span>
             </button>
@@ -391,15 +401,24 @@ function LeadsPageInner() {
 
       {/* Live scan banner — arriving from a storm's "Find leads" */}
       {stormParam && scanState?.status === 'running' && (
-        <div className="flex items-center gap-3 p-4 rounded-lg bg-vantage-card border border-vantage-yellow/40">
-          <Loader2 className="w-4 h-4 animate-spin text-vantage-yellow flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-vantage-text">Finding homes under this storm…</p>
-            <p className="text-xs text-vantage-muted mt-0.5">
-              Scraping real addressed buildings near the hail reports and scoring each against radar + spotter
-              evidence (~1 min). Browse your other territories below — this will drop in automatically.
-            </p>
+        <div className="p-4 rounded-lg bg-vantage-card border border-vantage-yellow/40 space-y-2.5">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-4 h-4 animate-spin text-vantage-yellow flex-shrink-0" />
+            <p className="text-sm font-semibold text-vantage-text flex-1">Finding homes under this storm…</p>
+            <span className="font-mono text-sm font-bold text-vantage-yellow tabular-nums">
+              {scanState.found.toLocaleString()} homes
+            </span>
           </div>
+          <div className="h-1.5 rounded-full bg-vantage-surface overflow-hidden">
+            <div
+              className="h-full bg-vantage-yellow transition-[width] duration-150 ease-out"
+              style={{ width: `${Math.round(scanState.progress * 100)}%` }}
+            />
+          </div>
+          <p className="text-xs font-mono text-vantage-muted">{scanState.stage}</p>
+          <p className="text-[11px] text-vantage-faint">
+            Browse your other territories below — this drops in automatically when it lands.
+          </p>
         </div>
       )}
       {stormParam && scanState?.status === 'error' && (
@@ -541,7 +560,14 @@ function LeadsPageInner() {
           <LeadListHeader />
           <div className="divide-y divide-vantage-border/60">
             {visible.map((lead, i) => (
-              <div key={lead.id} id={`lead-${lead.id}`} className={clsx('transition-all duration-700', highlightId === lead.id && 'ring-2 ring-inset ring-vantage-yellow')}>
+              <div
+                key={lead.id}
+                id={`lead-${lead.id}`}
+                // Stagger only the top rows so a pre-built list visibly "populates" on the
+                // Find-Leads click; rows below the fold appear immediately.
+                className={clsx('transition-all duration-700', i < 28 && 'lead-row-in', highlightId === lead.id && 'ring-2 ring-inset ring-vantage-yellow')}
+                style={i < 28 ? { animationDelay: `${i * 45}ms` } : undefined}
+              >
                 <LeadCard
                   lead={lead}
                   rank={i + 1}

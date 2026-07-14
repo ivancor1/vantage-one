@@ -95,35 +95,45 @@ export function useLeads() {
       return
     }
 
-    const { data, error } = await supabase
-      .from('leads')
-      .select(`*, territories ( value )`)
-      .is('deleted_at', null)
-      .order('lead_score', { ascending: false })
-
-    if (error) {
-      console.error('[leads] Fetch failed:', error.message)
-      setLeads([])
-    } else {
-      // Enrich with storm names if any leads have a nearest_storm_id
-      const rows = (data ?? []) as LeadRow[]
-      const stormIds = [...new Set(rows.map((r) => r.nearest_storm_id).filter(Boolean))] as string[]
-
-      let stormMap: Record<string, { name: string; severity: number }> = {}
-      if (stormIds.length > 0) {
-        const { data: storms } = await supabase
-          .from('storms')
-          .select('id, name, severity')
-          .in('id', stormIds)
-        for (const s of storms ?? []) stormMap[s.id] = { name: s.name, severity: s.severity }
+    // Paginate past Supabase's default 1000-row cap. Territories now hold ~900 leads each,
+    // and BOTH the map and this list read every lead — a single capped request would
+    // silently truncate whichever territory sorts lowest (the "Randall shows 84" bug).
+    const PAGE = 1000
+    let rows: LeadRow[] = []
+    for (let from = 0; from < 20000; from += PAGE) {
+      const { data, error } = await supabase
+        .from('leads')
+        .select(`*, territories ( value )`)
+        .is('deleted_at', null)
+        .order('lead_score', { ascending: false })
+        .order('id', { ascending: true }) // stable tiebreak so pages don't overlap/skip
+        .range(from, from + PAGE - 1)
+      if (error) {
+        console.error('[leads] Fetch failed:', error.message)
+        setLeads([]); setLoading(false); setHydrated(true)
+        return
       }
-
-      setLeads(rows.map((r) => ({
-        ...fromRow(r),
-        nearestStormName: r.nearest_storm_id ? stormMap[r.nearest_storm_id]?.name : undefined,
-        nearestStormSeverity: r.nearest_storm_id ? stormMap[r.nearest_storm_id]?.severity : undefined,
-      })))
+      const batch = (data ?? []) as LeadRow[]
+      rows = rows.concat(batch)
+      if (batch.length < PAGE) break
     }
+
+    // Enrich with storm names if any leads have a nearest_storm_id
+    const stormIds = [...new Set(rows.map((r) => r.nearest_storm_id).filter(Boolean))] as string[]
+    let stormMap: Record<string, { name: string; severity: number }> = {}
+    if (stormIds.length > 0) {
+      const { data: storms } = await supabase
+        .from('storms')
+        .select('id, name, severity')
+        .in('id', stormIds)
+      for (const s of storms ?? []) stormMap[s.id] = { name: s.name, severity: s.severity }
+    }
+
+    setLeads(rows.map((r) => ({
+      ...fromRow(r),
+      nearestStormName: r.nearest_storm_id ? stormMap[r.nearest_storm_id]?.name : undefined,
+      nearestStormSeverity: r.nearest_storm_id ? stormMap[r.nearest_storm_id]?.severity : undefined,
+    })))
 
     setLoading(false)
     setHydrated(true)
