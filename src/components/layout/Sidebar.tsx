@@ -9,7 +9,6 @@ import {
   Users,
   MapPin,
   Settings,
-  ShieldAlert,
   Trash2,
   Layers,
 } from 'lucide-react'
@@ -37,7 +36,8 @@ export default function Sidebar() {
     <aside className="flex flex-col w-[220px] min-h-screen bg-vantage-surface border-r border-vantage-border flex-shrink-0">
       {/* Wordmark */}
       <div className="flex items-center gap-2.5 px-5 py-5 border-b border-vantage-border">
-        <ShieldAlert className="w-5 h-5 text-vantage-text flex-shrink-0" strokeWidth={2.25} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/vantage-logo.png" alt="Vantage logo" className="w-7 h-7 rounded-md flex-shrink-0" />
         <span className="font-display text-vantage-text font-semibold tracking-[-0.02em] text-lg">
           Vantage
         </span>
