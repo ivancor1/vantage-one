@@ -6,6 +6,7 @@ import { Users, ChevronDown, Database, MapPin, Sparkles, Loader2, Navigation, Do
 import clsx from 'clsx'
 import type { LeadStatus } from '@/lib/types'
 import { useLeads } from '@/lib/leads-api'
+import { useStorms } from '@/lib/storm-api'
 import { supabase } from '@/lib/supabase'
 import { useStormLeadStates } from '@/lib/storm-leads'
 import { STATUS_META } from '@/lib/lead-scoring'
@@ -58,7 +59,11 @@ function LeadsPageInner() {
   const stormParam = searchParams.get('storm')
   const genStates = useStormLeadStates()
   const scanState = stormParam ? genStates[stormParam] : undefined
+  const { storms } = useStorms()
+  const scanActive = Boolean(stormParam) && scanState?.status === 'running'
+  const scanStormName = storms.find((s) => s.id === stormParam)?.name ?? 'this storm'
   const landedRef = useRef<string | null>(null)
+  const scanLandedRef = useRef<string | null>(null)
   useEffect(() => {
     if (!stormParam || scanState?.status !== 'done') return
     if (landedRef.current === stormParam) return
@@ -66,6 +71,14 @@ function LeadsPageInner() {
     reload().then(() => setTerritory(scanState.territoryId))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stormParam, scanState])
+
+  // Arriving via Find Leads → land on the live "collecting homes" scan view (a pseudo-tab)
+  useEffect(() => {
+    if (scanActive && stormParam && scanLandedRef.current !== stormParam) {
+      scanLandedRef.current = stormParam
+      setTerritory('__scan__')
+    }
+  }, [scanActive, stormParam])
 
   // The most sellable filter there is: homes where two independent government sources
   // (NOAA radar + NWS spotters) both confirm hail
@@ -400,11 +413,11 @@ function LeadsPageInner() {
       </div>
 
       {/* Live scan banner — arriving from a storm's "Find leads" */}
-      {stormParam && scanState?.status === 'running' && (
+      {scanActive && scanState?.status === 'running' && territory !== '__scan__' && (
         <div className="p-4 rounded-lg bg-vantage-card border border-vantage-yellow/40 space-y-2.5">
           <div className="flex items-center gap-3">
             <Loader2 className="w-4 h-4 animate-spin text-vantage-yellow flex-shrink-0" />
-            <p className="text-sm font-semibold text-vantage-text flex-1">Finding homes under this storm…</p>
+            <p className="text-sm font-semibold text-vantage-text flex-1">Still collecting homes near {scanStormName}…</p>
             <span className="font-mono text-sm font-bold text-vantage-yellow tabular-nums">
               {scanState.found.toLocaleString()} homes
             </span>
@@ -429,8 +442,23 @@ function LeadsPageInner() {
       )}
 
       {/* Territory tabs */}
-      {!loading && territories.length > 0 && (
+      {!loading && (territories.length > 0 || scanActive) && (
         <div className="flex items-center gap-1 flex-wrap">
+          {scanActive && (
+            <button
+              onClick={() => setTerritory('__scan__')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-colors',
+                territory === '__scan__'
+                  ? 'bg-vantage-yellow text-vantage-black border-vantage-yellow'
+                  : 'text-vantage-muted border-vantage-border hover:border-vantage-bright hover:text-vantage-text'
+              )}
+            >
+              <Loader2 className="w-3 h-3 animate-spin" />
+              {scanStormName}
+              <span className="text-[10px] font-bold rounded px-1 opacity-70">collecting…</span>
+            </button>
+          )}
           <button
             onClick={() => { setTerritory('all'); setFilter('all') }}
             className={clsx(
@@ -515,6 +543,55 @@ function LeadsPageInner() {
               </span>
             </button>
           )}
+        </div>
+      )}
+
+      {/* Live "collecting homes" scan view — the Find-leads pseudo-tab */}
+      {scanActive && territory === '__scan__' && scanState?.status === 'running' && (
+        <div className="bg-vantage-card border border-vantage-yellow/30 rounded-lg p-8">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2.5">
+              <Loader2 className="w-5 h-5 animate-spin text-vantage-yellow flex-shrink-0" />
+              <div>
+                <p className="text-base font-semibold text-vantage-text">Collecting homes near {scanStormName}…</p>
+                <p className="text-xs text-vantage-muted mt-0.5">
+                  Real addressed homes from OpenStreetMap, scored against NOAA radar + NWS spotter hail.
+                </p>
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <p className="text-3xl font-bold font-mono text-vantage-yellow tabular-nums leading-none">
+                {scanState.found.toLocaleString()}
+              </p>
+              <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest mt-1">homes found</p>
+            </div>
+          </div>
+          <div className="h-2 rounded-full bg-vantage-surface overflow-hidden">
+            <div
+              className="h-full bg-vantage-yellow transition-[width] duration-150 ease-out"
+              style={{ width: `${Math.round(scanState.progress * 100)}%` }}
+            />
+          </div>
+          <p className="text-xs font-mono text-vantage-muted mt-3">{scanState.stage}</p>
+          {/* Shimmer skeleton rows — homes streaming in */}
+          <div className="mt-6 space-y-2.5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3"
+                style={{ animation: 'leadRowIn 600ms ease-out both', animationDelay: `${i * 90}ms` }}
+              >
+                <div className="w-11 h-11 rounded bg-vantage-surface animate-pulse" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-44 rounded bg-vantage-surface animate-pulse" />
+                  <div className="h-2 w-24 rounded bg-vantage-surface animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-vantage-faint mt-5">
+            Browse a finished territory in the tabs above while this runs — it keeps collecting in the background.
+          </p>
         </div>
       )}
 

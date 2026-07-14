@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { MapPin, Plus, Trash2, CloudLightning, AlertCircle, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import Link from 'next/link'
+import { MapPin, Plus, Trash2, CloudLightning, AlertCircle, Loader2, CheckCircle2, XCircle, Layers } from 'lucide-react'
 import clsx from 'clsx'
 import { useTerritoriesStore, activeStormsForTerritory, type TerritoryType } from '@/lib/territories'
 import { useStorms } from '@/lib/storm-api'
@@ -52,15 +53,24 @@ export default function TerritoriesPage() {
 
   return (
     <div className="p-8 space-y-6 max-w-5xl mx-auto">
-      <div>
-        <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest mb-1">
-          Lead Generation
-        </p>
-        <h2 className="text-lg font-semibold text-vantage-text">Territories</h2>
-        <p className="text-xs text-vantage-muted mt-1">
-          Add a ZIP code, city, or neighborhood. Vantage will scrape all addressed buildings
-          in your selected radius and add them as leads.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest mb-1">
+            Lead Generation
+          </p>
+          <h2 className="text-lg font-semibold text-vantage-text">Territories</h2>
+          <p className="text-xs text-vantage-muted mt-1">
+            Add a ZIP code, city, or neighborhood. Vantage will scrape all addressed buildings
+            in your selected radius and add them as leads.
+          </p>
+        </div>
+        <Link
+          href="/shingle-analysis"
+          className="flex items-center gap-1.5 flex-shrink-0 px-3.5 py-2 rounded border border-vantage-border text-xs font-semibold text-vantage-text hover:border-vantage-bright hover:bg-black/[0.03] transition-colors"
+        >
+          <Layers className="w-3.5 h-3.5 text-vantage-yellow" />
+          Shingle probability analysis
+        </Link>
       </div>
 
       {/* Add form */}

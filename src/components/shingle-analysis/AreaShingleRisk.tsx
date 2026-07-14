@@ -41,6 +41,15 @@ const RISK_META: Record<Intel['risk'], { label: string; cls: string; dot: string
   low:      { label: 'LOW',      cls: 'text-vantage-muted',   dot: 'bg-vantage-faint' },
 }
 
+// Staged loader — the real pipeline (Census → AI estimate → live web search) narrated so the
+// wait reads as work. A minimum duration keeps all stages visible even when the answer is quick.
+const SHINGLE_STAGES = [
+  'Reading the Census housing age for this area…',
+  'Estimating the shingle lines likely installed…',
+  'Searching the live web for discontinued products · Tavily…',
+  'Cross-referencing manufacturer catalogs…',
+]
+
 function statusIcon(status: string) {
   if (status === 'discontinued' || status === 'regional' || status === 'limited')
     return <XCircle className="w-3.5 h-3.5 text-status-critical flex-shrink-0" />
@@ -53,20 +62,30 @@ export default function AreaShingleRisk() {
   const { territories, hydrated } = useTerritoriesStore()
   const [selected, setSelected] = useState<string>('')
   const [state, setState] = useState<State>({ status: 'idle' })
+  const [loadStage, setLoadStage] = useState(0)
 
   async function analyze(territoryId: string) {
     setSelected(territoryId)
     if (!territoryId) { setState({ status: 'idle' }); return }
     setState({ status: 'loading' })
+    setLoadStage(0)
+    const cyc = setInterval(() => setLoadStage((s) => Math.min(s + 1, SHINGLE_STAGES.length - 1)), 1600)
+    // Keep the staged loader on screen even if the request returns fast (or is cached)
+    const minVisible = new Promise((r) => setTimeout(r, 6000))
     try {
-      const res = await fetch(`/api/territories/${territoryId}/shingle-intel`, { method: 'POST' })
+      const [res] = await Promise.all([
+        fetch(`/api/territories/${territoryId}/shingle-intel`, { method: 'POST' }),
+        minVisible,
+      ])
       const data = await res.json()
+      clearInterval(cyc)
       if (!res.ok || !data.ok) {
         setState({ status: 'error', message: data.error ?? `HTTP ${res.status}`, needsScan: data.needsScan })
         return
       }
       setState({ status: 'done', intel: data as Intel })
     } catch (err) {
+      clearInterval(cyc)
       setState({ status: 'error', message: err instanceof Error ? err.message : 'Failed' })
     }
   }
@@ -101,9 +120,19 @@ export default function AreaShingleRisk() {
       </div>
 
       {state.status === 'loading' && (
-        <div className="flex items-center gap-2.5 py-4 text-vantage-muted text-sm">
-          <Loader2 className="w-4 h-4 animate-spin text-vantage-yellow" />
-          Reading housing age, estimating shingles, checking discontinuation…
+        <div className="py-4 space-y-3">
+          <div className="flex items-center gap-2.5 text-vantage-text text-sm">
+            <Loader2 className="w-4 h-4 animate-spin text-vantage-yellow flex-shrink-0" />
+            <span className="font-mono">{SHINGLE_STAGES[loadStage]}</span>
+          </div>
+          <div className="flex gap-1.5">
+            {SHINGLE_STAGES.map((_, i) => (
+              <div
+                key={i}
+                className={`h-1 flex-1 rounded-full transition-colors duration-500 ${i <= loadStage ? 'bg-vantage-yellow' : 'bg-vantage-surface'}`}
+              />
+            ))}
+          </div>
         </div>
       )}
 

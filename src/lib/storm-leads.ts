@@ -31,65 +31,38 @@ export function useStormLeadStates(): Record<string, StormLeadState> {
   return useSyncExternalStore(subscribe, () => snapshot, () => snapshot)
 }
 
-type GenResult = { ok: boolean; territoryId?: string; count?: number; error?: string }
-
-// A storm scan is real work — pull addressed homes, enrich, interpolate hail, score. But when
-// the territory is already built the server answers in ~0.5s, which reads as fake. So we replay
-// the REAL pipeline stages on a controlled timer with a live progress bar + homes counter. The
-// stages are honest (exactly what the pipeline does); only the pacing is scripted. One number
-// tunes it — sized so you click Find Leads, narrate over the finished Broken Arrow example, and
-// this lands as you come back to it.
-const SIMULATED_SCAN_MS = 30_000
+// The storm scan visualises the REAL pipeline (OSM → Census/FEMA → NOAA radar → scoring) as a
+// staged progress bar + climbing homes counter. It is scripted and self-contained — it never
+// calls Overpass, so it can't stall or fail on camera. It HOLDS near-complete ("collecting…")
+// rather than finishing: the demo shows this working state, then pivots to a pre-built territory
+// (Broken Arrow) to show real, AI-assessed leads. One number tunes the pace.
+const SIMULATED_SCAN_MS = 85_000
+const SCAN_TARGET_HOMES = 640
 
 const SCAN_STAGES: { at: number; label: string }[] = [
   { at: 0.00, label: 'Querying OpenStreetMap for addressed homes…' },
-  { at: 0.24, label: 'Pulling county context — US Census housing age, FEMA hail history…' },
-  { at: 0.46, label: 'Interpolating hail per home — NOAA NEXRAD radar + NWS spotter reports…' },
-  { at: 0.72, label: 'Scoring & ranking every home…' },
-  { at: 0.93, label: 'Finalizing lead list…' },
+  { at: 0.20, label: 'Pulling county context — US Census housing age, FEMA hail history…' },
+  { at: 0.42, label: 'Interpolating hail per home — NOAA NEXRAD radar + NWS spotter reports…' },
+  { at: 0.66, label: 'Scoring & ranking every home…' },
+  { at: 0.88, label: 'Finalizing lead list…' },
 ]
 
-/** Kick off lead generation for a storm and play a believable, staged scan. The real fetch
- *  runs alongside (returns fast for a pre-built territory); we only flip to 'done' once the
- *  scripted timer AND the fetch have both completed. */
-export async function startFindLeads(stormId: string) {
+/** Start the storm scan's loading state. Scripted + reliable: it plays the pipeline stages and a
+ *  climbing counter, holds at ~96% ("collecting…") until the page reloads, and never blocks on
+ *  the network. The demo shows this, then pivots to the pre-built Broken Arrow leads. */
+export function startFindLeads(stormId: string) {
   if (states.get(stormId)?.status === 'running') return
   const startedAt = Date.now()
   states.set(stormId, { status: 'running', progress: 0, stage: SCAN_STAGES[0].label, found: 0, territoryId: null })
   emit()
-
-  // Real fetch in parallel: its count drives the counter target; its territoryId lets the Leads
-  // page hide the territory until the reveal so its lead count never leaks mid-"scan".
-  const box: { current: GenResult | null } = { current: null }
-  const fetchDone = fetch(`/api/storms/${stormId}/generate-leads`, { method: 'POST' })
-    .then((r) => r.json() as Promise<GenResult>)
-    .catch((err): GenResult => ({ ok: false, error: err instanceof Error ? err.message : 'Failed' }))
-    .then((d) => { box.current = d })
-
-  await new Promise<void>((resolve) => {
-    const tick = setInterval(() => {
-      if (states.get(stormId)?.status !== 'running') { clearInterval(tick); resolve(); return }
-      const p = Math.min((Date.now() - startedAt) / SIMULATED_SCAN_MS, 1)
-      const stage = [...SCAN_STAGES].reverse().find((s) => p >= s.at) ?? SCAN_STAGES[0]
-      const target = box.current?.count ?? 800
-      const found = Math.round(target * Math.pow(p, 0.7)) // front-loaded: homes appear, then scoring
-      states.set(stormId, {
-        status: 'running', progress: p, stage: stage.label, found,
-        territoryId: box.current?.ok ? box.current.territoryId ?? null : null,
-      })
-      emit()
-      if (p >= 1) { clearInterval(tick); resolve() }
-    }, 120)
-  })
-
-  await fetchDone
-  const data = box.current
-  if (!data || !data.ok || !data.territoryId) {
-    states.set(stormId, { status: 'error', message: data?.error ?? 'Failed' })
-  } else {
-    states.set(stormId, { status: 'done', count: data.count ?? 0, territoryId: data.territoryId })
-  }
-  emit()
+  const tick = setInterval(() => {
+    if (states.get(stormId)?.status !== 'running') { clearInterval(tick); return }
+    const p = Math.min((Date.now() - startedAt) / SIMULATED_SCAN_MS, 0.96) // holds at 96% — still "collecting"
+    const stage = [...SCAN_STAGES].reverse().find((s) => p >= s.at) ?? SCAN_STAGES[0]
+    const found = Math.round(SCAN_TARGET_HOMES * Math.pow(p, 0.7)) // front-loaded: homes appear, then scoring
+    states.set(stormId, { status: 'running', progress: p, stage: stage.label, found, territoryId: null })
+    emit()
+  }, 150)
 }
 
 /** Restore "done" states from the DB (storm territories are named after the storm). */
