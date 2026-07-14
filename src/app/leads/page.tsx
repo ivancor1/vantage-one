@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Users, ChevronDown, Database, MapPin, Sparkles, Loader2 } from 'lucide-react'
+import { Users, ChevronDown, Database, MapPin, Sparkles, Loader2, Navigation, Download, Radar } from 'lucide-react'
 import clsx from 'clsx'
 import type { LeadStatus } from '@/lib/types'
 import { useLeads } from '@/lib/leads-api'
+import { supabase } from '@/lib/supabase'
 import { STATUS_META } from '@/lib/lead-scoring'
-import LeadCard from '@/components/leads/LeadCard'
+import LeadCard, { LeadListHeader } from '@/components/leads/LeadCard'
 import Link from 'next/link'
 
 type StatusFilter = 'all' | LeadStatus
@@ -23,7 +24,15 @@ const STATUS_FILTER_ORDER: StatusFilter[] = [
 ]
 
 export default function LeadsPage() {
-  const { leads, loading, hydrated, updateStatus } = useLeads()
+  return (
+    <Suspense fallback={<div className="p-8 text-vantage-faint text-xs font-mono">LOADING…</div>}>
+      <LeadsPageInner />
+    </Suspense>
+  )
+}
+
+function LeadsPageInner() {
+  const { leads, loading, hydrated, updateStatus, reload } = useLeads()
   const [territory, setTerritory] = useState<string>('all')
   const [filter, setFilter]       = useState<StatusFilter>('all')
   const [sort, setSort]           = useState<SortKey>('score')
@@ -36,6 +45,22 @@ export default function LeadsPage() {
 
   // Keep localLeads in sync when Supabase data reloads
   useEffect(() => { setLocalLeads(null) }, [leads])
+
+  // Land filtered to a specific territory (e.g. arriving from a storm's "Find leads")
+  useEffect(() => {
+    const t = searchParams.get('territory')
+    if (t) setTerritory(t)
+  }, [searchParams])
+
+  // The most sellable filter there is: homes where two independent government sources
+  // (NOAA radar + NWS spotters) both confirm hail
+  const [corroboratedOnly, setCorroboratedOnly] = useState(false)
+
+  // High-priority view (from the dashboard card): only score ≥ 65, workable status
+  const [priorityOnly, setPriorityOnly] = useState(false)
+  useEffect(() => {
+    if (searchParams.get('priority') === 'high') setPriorityOnly(true)
+  }, [searchParams])
 
   // Scroll to + highlight lead when navigated from map
   useEffect(() => {
@@ -58,8 +83,11 @@ export default function LeadsPage() {
     setAnalyzingIds((prev) => new Set(prev).add(id))
   }
 
-  function handleAnalyzed(id: string, visualRoofScore: number, aiNotes: string, leadScore: number) {
+  function handleAnalyzed(id: string, visualRoofScore: number | null, aiNotes: string, leadScore: number) {
     setAnalyzingIds((prev) => { const s = new Set(prev); s.delete(id); return s })
+    // null = the check failed — clear the spinner but write NOTHING (a failed vision call
+    // must never render as "score 0 / looks ok")
+    if (visualRoofScore == null) return
     setLocalLeads((prev) => {
       const base = prev ?? leads
       return base.map((l) =>
@@ -68,11 +96,13 @@ export default function LeadsPage() {
     })
   }
 
-  // Batch: analyze every unanalyzed roof, pooled so cards fill in live.
+  // Batch: analyze every unanalyzed roof in the selected territory tab, pooled so cards fill in live.
   // Reuses the existing per-lead endpoint (gpt-4o-mini vision) — ~$0.002/roof.
   async function analyzeAll() {
     if (batch.running) return
-    const targets = (localLeads ?? leads).filter((l) => l.visualRoofScore == null)
+    const targets = (localLeads ?? leads).filter(
+      (l) => (territory === 'all' || l.territoryId === territory) && l.visualRoofScore == null
+    )
     if (!targets.length) return
     setBatch({ running: true, done: 0, total: targets.length })
     const queue = [...targets]
@@ -89,7 +119,7 @@ export default function LeadsPage() {
           handleAnalyzed(lead.id, d.visualRoofScore, d.aiNotes ?? '', d.leadScore ?? lead.leadScore)
         } catch (err) {
           console.error('[analyze-all]', lead.id, err)
-          handleAnalyzed(lead.id, lead.visualRoofScore ?? 0, lead.aiNotes ?? '', lead.leadScore) // clear spinner, no change
+          handleAnalyzed(lead.id, lead.visualRoofScore ?? null, lead.aiNotes ?? '', lead.leadScore) // clear spinner, write nothing
         }
         done += 1
         setBatch((b) => ({ ...b, done }))
@@ -98,8 +128,6 @@ export default function LeadsPage() {
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker))
     setBatch((b) => ({ ...b, running: false }))
   }
-
-  const unanalyzedCount = displayLeads.filter((l) => l.visualRoofScore == null).length
 
   // Unique territories derived from loaded leads
   const territories = useMemo(() => {
@@ -115,21 +143,117 @@ export default function LeadsPage() {
   // Apply territory filter first, then status filter
   const byTerritory = territory === 'all' ? displayLeads : displayLeads.filter((l) => l.territoryId === territory)
 
+  // Batch-assess button reflects only the selected territory tab
+  const unanalyzedCount = byTerritory.filter((l) => l.visualRoofScore == null).length
+
   const counts: Record<string, number> = { all: byTerritory.length }
   for (const lead of byTerritory) {
     counts[lead.status] = (counts[lead.status] ?? 0) + 1
   }
 
+  const WORKABLE = new Set<LeadStatus>(['new', 'knocked', 'interested', 'inspection'])
   const visible = byTerritory
     .filter((l) => filter === 'all' || l.status === filter)
+    .filter((l) => !priorityOnly || (l.leadScore >= 65 && WORKABLE.has(l.status)))
+    .filter((l) => !corroboratedOnly || (l.radarHailIn != null && l.spotterHailIn != null))
     .sort((a, b) => {
       if (sort === 'score')    return b.leadScore - a.leadScore
       if (sort === 'distance') return (a.distanceToTerritoryKm ?? 99) - (b.distanceToTerritoryKm ?? 99)
       return (b.roofAge ?? 0) - (a.roofAge ?? 0)
     })
 
+  // Search wider: re-scan the selected territory at +2 mi (max 10). The scrape upserts
+  // with ignoreDuplicates, so this only ADDS homes it hasn't seen — nothing is re-scored away.
+  const [widening, setWidening] = useState<{ running: boolean; note: string }>({ running: false, note: '' })
+  async function searchWider() {
+    if (widening.running || territory === 'all') return
+    setWidening({ running: true, note: '' })
+    try {
+      const { data: t } = await supabase
+        .from('territories')
+        .select('lat, lng, radius_miles')
+        .eq('id', territory)
+        .single()
+      if (!t?.lat || !t?.lng) throw new Error('Territory has no saved center')
+      const newRadius = Math.min((t.radius_miles ?? 3) + 2, 10)
+      const before = displayLeads.filter((l) => l.territoryId === territory).length
+      const res = await fetch('/api/territories/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ territoryId: territory, lat: t.lat, lng: t.lng, radiusMiles: newRadius }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d?.error ?? `HTTP ${res.status}`)
+      await supabase.from('territories').update({ radius_miles: newRadius }).eq('id', territory)
+      await reload()
+      setWidening({ running: false, note: `now scanning ${newRadius} mi · ${Math.max((d?.count ?? 0) - before, 0)} new` })
+      setTimeout(() => setWidening((w) => ({ ...w, note: '' })), 4000)
+    } catch (err) {
+      setWidening({ running: false, note: err instanceof Error ? err.message : 'failed' })
+      setTimeout(() => setWidening((w) => ({ ...w, note: '' })), 4000)
+    }
+  }
+
+  // ── Pick homes → optimal route ─────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  function toggleSelect(id: string, on: boolean) {
+    setSelectedIds((prev) => {
+      const s = new Set(prev)
+      if (on) s.add(id); else s.delete(id)
+      return s
+    })
+  }
+
+  // Order stops with nearest-neighbor so the drive doesn't zig-zag (fine at ≤10 stops)
+  function orderStops<T extends { lat: number; lng: number }>(stops: T[]): T[] {
+    if (stops.length <= 2) return stops
+    const rem = [...stops]
+    const path = [rem.shift()!]
+    while (rem.length) {
+      const last = path[path.length - 1]
+      const cos = Math.cos((last.lat * Math.PI) / 180)
+      let bi = 0, bd = Infinity
+      rem.forEach((s, i) => {
+        const d = (s.lat - last.lat) ** 2 + ((s.lng - last.lng) * cos) ** 2
+        if (d < bd) { bd = d; bi = i }
+      })
+      path.push(rem.splice(bi, 1)[0])
+    }
+    return path
+  }
+
+  // Route: your picked homes (checkboxes) in an optimized order — or, with nothing
+  // picked, the top 9 fresh leads. Google Maps consumer limit: 10 stops total.
+  function openKnockRoute() {
+    const picked = visible.filter((l) => selectedIds.has(l.id))
+    const stops = orderStops(picked.length ? picked.slice(0, 10) : visible.filter((l) => l.status === 'new').slice(0, 9))
+    if (!stops.length) return
+    const pt = (l: typeof stops[number]) => `${l.lat},${l.lng}`
+    const destination = pt(stops[stops.length - 1])
+    const waypoints = stops.slice(0, -1).map(pt).join('|')
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}${waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : ''}&travelmode=driving`
+    window.open(url, '_blank', 'noopener')
+  }
+
+  // CSV of the currently visible leads — headers match what roofing CRMs import
+  function exportCsv() {
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const header = 'address,score,radar_hail_in,spotter_hail_in,nearest_report_km,roof_squares_est,year_built,status,lat,lng'
+    const lines = visible.map((l) => [
+      esc(l.address), l.leadScore, l.radarHailIn ?? '', l.spotterHailIn ?? '', l.nearestReportKm ?? '',
+      l.footprintSqm ? Math.round((l.footprintSqm * 1.15) / 9.29) : '', l.yearBuilt ?? '', l.status, l.lat, l.lng,
+    ].join(','))
+    const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'vantage-leads.csv'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   return (
-    <div className="p-8 space-y-6 max-w-7xl">
+    <div className="p-8 space-y-6 max-w-7xl mx-auto">
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -137,7 +261,18 @@ export default function LeadsPage() {
           <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest mb-1">
             Territory Leads · OSM Buildings + Vantage Score
           </p>
-          <h2 className="text-lg font-semibold text-vantage-text">Lead Intelligence</h2>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-lg font-semibold text-vantage-text">Lead Intelligence</h2>
+            {priorityOnly && (
+              <button
+                onClick={() => setPriorityOnly(false)}
+                title="Showing only high-priority leads (score 65+, still workable) — click to show all"
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-status-high/15 border border-status-high/30 text-[11px] font-semibold text-status-high hover:bg-status-high/25 transition-colors"
+              >
+                High-priority only <span className="text-status-high/60">✕</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -156,17 +291,71 @@ export default function LeadsPage() {
               )}
               <span className="relative flex items-center gap-1.5">
                 {batch.running ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analyzing roofs… {batch.done}/{batch.total}</>
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Assessing roofs… {batch.done}/{batch.total}</>
                 ) : (
-                  <><Sparkles className="w-3.5 h-3.5" /> Analyze all {unanalyzedCount} roofs</>
+                  <><Sparkles className="w-3.5 h-3.5" /> Assess all {unanalyzedCount} roofs</>
                 )}
               </span>
             </button>
           )}
-          {!batch.running && unanalyzedCount === 0 && displayLeads.length > 0 && (
+          {!batch.running && unanalyzedCount === 0 && byTerritory.length > 0 && (
             <span className="flex items-center gap-1.5 text-xs text-status-success font-medium">
-              <Sparkles className="w-3.5 h-3.5" /> All roofs analyzed
+              <Sparkles className="w-3.5 h-3.5" /> All roofs assessed
             </span>
+          )}
+
+          {/* Deliverables — quiet icons, tooltips carry the labels */}
+          {visible.length > 0 && (
+            <div className="flex items-center gap-0.5">
+              {territory !== 'all' && (
+                <span className="flex items-center gap-1">
+                  <button
+                    onClick={searchWider}
+                    disabled={widening.running}
+                    title="Search wider — re-scan this territory at +2 miles and add new homes (max 10 mi)"
+                    className="p-2 rounded text-vantage-faint hover:text-vantage-text hover:bg-black/[0.04] transition-colors disabled:opacity-50"
+                  >
+                    {widening.running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radar className="w-4 h-4" />}
+                  </button>
+                  {widening.note && (
+                    <span className="text-[10px] font-mono text-vantage-faint whitespace-nowrap">{widening.note}</span>
+                  )}
+                </span>
+              )}
+              {selectedIds.size > 0 ? (
+                <span className="flex items-center gap-1.5">
+                  <button
+                    onClick={openKnockRoute}
+                    title={selectedIds.size > 10 ? 'Google Maps caps routes at 10 stops — routing your 10 best-ranked picks' : 'Opens Google Maps with your picked homes in an optimized driving order'}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-vantage-yellow text-vantage-black text-xs font-bold hover:opacity-90 transition-opacity"
+                  >
+                    <Navigation className="w-3.5 h-3.5" />
+                    Route {Math.min(selectedIds.size, 10)} stops
+                  </button>
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="text-[10px] font-mono text-vantage-faint hover:text-vantage-text"
+                  >
+                    clear
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={openKnockRoute}
+                  title="Knock route — pick homes with the checkboxes, or this routes the top 9 fresh leads"
+                  className="p-2 rounded text-vantage-faint hover:text-vantage-text hover:bg-black/[0.04] transition-colors"
+                >
+                  <Navigation className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                onClick={exportCsv}
+                title="Export visible leads as CSV (imports into AccuLynx / JobNimbus)"
+                className="p-2 rounded text-vantage-faint hover:text-vantage-text hover:bg-black/[0.04] transition-colors"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
           )}
 
           <span className="text-xs text-vantage-faint">Sort:</span>
@@ -253,6 +442,25 @@ export default function LeadsPage() {
               </button>
             )
           })}
+
+          {/* Two independent government sources agreeing — the strongest evidence filter */}
+          {byTerritory.some((l) => l.radarHailIn != null && l.spotterHailIn != null) && (
+            <button
+              onClick={() => setCorroboratedOnly((v) => !v)}
+              title="Only homes where NOAA radar AND NWS spotter reports both confirm hail"
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-colors ml-2',
+                corroboratedOnly
+                  ? 'bg-status-critical/15 text-status-critical border-status-critical/40'
+                  : 'text-vantage-muted border-vantage-border hover:border-vantage-bright hover:text-vantage-text'
+              )}
+            >
+              ⚡ Radar + spotter confirmed
+              <span className={clsx('text-[10px] font-bold rounded px-1', corroboratedOnly ? 'text-status-critical' : 'text-vantage-faint')}>
+                {byTerritory.filter((l) => l.radarHailIn != null && l.spotterHailIn != null).length}
+              </span>
+            </button>
+          )}
         </div>
       )}
 
@@ -291,56 +499,29 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* Lead list — two columns: unanalyzed left, analyzed right */}
-      {!loading && hydrated && visible.length > 0 && (() => {
-        const unanalyzed = visible.filter((l) => l.visualRoofScore == null)
-        const analyzed   = visible.filter((l) => l.visualRoofScore != null)
-        return (
-          <div className="grid grid-cols-2 gap-6 items-start">
-            {/* Left: unanalyzed */}
-            <div className="space-y-3">
-              <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest">
-                Unanalyzed · {unanalyzed.length}
-              </p>
-              {unanalyzed.length === 0 ? (
-                <p className="text-xs text-vantage-faint py-4 text-center">All leads analyzed</p>
-              ) : unanalyzed.map((lead, i) => (
-                <div key={lead.id} id={`lead-${lead.id}`} className={clsx('rounded-lg transition-all duration-700', highlightId === lead.id && 'ring-2 ring-vantage-yellow')}>
-                  <LeadCard
-                    lead={lead}
-                    rank={i + 1}
-                    onStatusChange={(s) => updateStatus(lead.id, s)}
-                    analyzing={analyzingIds.has(lead.id)}
-                    onAnalyze={() => handleAnalyze(lead.id)}
-                    onAnalyzed={handleAnalyzed}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {/* Right: analyzed */}
-            <div className="space-y-3">
-              <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest">
-                AI Analyzed · {analyzed.length}
-              </p>
-              {analyzed.length === 0 ? (
-                <p className="text-xs text-vantage-faint py-4 text-center">No analyzed leads yet · click Analyze Roof on any card</p>
-              ) : analyzed.map((lead, i) => (
-                <div key={lead.id} id={`lead-${lead.id}`} className={clsx('rounded-lg transition-all duration-700', highlightId === lead.id && 'ring-2 ring-vantage-yellow')}>
-                  <LeadCard
-                    lead={lead}
-                    rank={i + 1}
-                    onStatusChange={(s) => updateStatus(lead.id, s)}
-                    analyzing={analyzingIds.has(lead.id)}
-                    onAnalyze={() => handleAnalyze(lead.id)}
-                    onAnalyzed={handleAnalyzed}
-                  />
-                </div>
-              ))}
-            </div>
+      {/* Lead list — one Clay-style table, best lead first. Rows expand for detail;
+          a ✓ in the ROOF column marks checked roofs (they pop in live during batch). */}
+      {!loading && hydrated && visible.length > 0 && (
+        <div className="bg-vantage-card border border-vantage-border rounded-lg overflow-hidden">
+          <LeadListHeader />
+          <div className="divide-y divide-vantage-border/60">
+            {visible.map((lead, i) => (
+              <div key={lead.id} id={`lead-${lead.id}`} className={clsx('transition-all duration-700', highlightId === lead.id && 'ring-2 ring-inset ring-vantage-yellow')}>
+                <LeadCard
+                  lead={lead}
+                  rank={i + 1}
+                  onStatusChange={(s) => updateStatus(lead.id, s)}
+                  analyzing={analyzingIds.has(lead.id)}
+                  onAnalyze={() => handleAnalyze(lead.id)}
+                  onAnalyzed={handleAnalyzed}
+                  selected={selectedIds.has(lead.id)}
+                  onSelectChange={(on) => toggleSelect(lead.id, on)}
+                />
+              </div>
+            ))}
           </div>
-        )
-      })()}
+        </div>
+      )}
 
       {!loading && visible.length > 0 && (
         <p className="text-[10px] text-vantage-faint font-mono text-center pb-4">

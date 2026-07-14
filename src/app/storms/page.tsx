@@ -1,8 +1,11 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
-import { CloudLightning, ArrowRight } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { CloudLightning, ArrowRight, Users, Loader2, Check } from 'lucide-react'
 import { useStorms } from '@/lib/storm-api'
+import { useStormLeadStates, startFindLeads, hydrateStormLeadStates } from '@/lib/storm-leads'
 
 function severityBadge(s: number) {
   if (s >= 9) return { label: 'CRITICAL', cls: 'bg-status-critical/15 text-status-critical border-status-critical/30' }
@@ -12,6 +15,26 @@ function severityBadge(s: number) {
 
 export default function StormsPage() {
   const { storms, loading, error } = useStorms()
+  const router = useRouter()
+  // Module-scoped store: state survives tab switches; fetch keeps running in background
+  const genStates = useStormLeadStates()
+
+  // After a refresh, restore "N leads found" for storms that already have lead sets
+  useEffect(() => {
+    if (storms.length) hydrateStormLeadStates(storms.map((s) => ({ id: s.id, name: s.name })))
+  }, [storms])
+
+  function findLeads(e: React.MouseEvent, stormId: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    startFindLeads(stormId)
+  }
+
+  function viewLeads(e: React.MouseEvent, territoryId: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    router.push(`/leads?territory=${territoryId}`)
+  }
 
   const sorted = [...storms].sort((a, b) => b.severity - a.severity).map((storm) => ({
     ...storm,
@@ -22,7 +45,7 @@ export default function StormsPage() {
   }))
 
   return (
-    <div className="p-8 space-y-4 max-w-4xl">
+    <div className="p-8 space-y-4 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest mb-1">
@@ -132,11 +155,51 @@ export default function StormsPage() {
                         <p className="text-xl font-bold font-mono text-vantage-yellow">{storm.severity}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1">Homes in Radius</p>
-                        <p className="text-xl font-bold font-mono text-vantage-text">{storm.estimatedHomes.toLocaleString()}</p>
+                        <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1">Hail Reports</p>
+                        <p className="text-xl font-bold font-mono text-vantage-text">{storm.reports.filter((r) => r.type === 'HAIL').length}</p>
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Find leads — the storm-first action */}
+                <div className="flex items-center gap-3 mt-4">
+                  {(() => {
+                    const gen = genStates[storm.id]
+                    if (gen?.status === 'running') {
+                      return (
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-vantage-surface border border-vantage-border text-xs font-semibold text-vantage-muted">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Finding homes under this storm… ~1 min
+                        </span>
+                      )
+                    }
+                    if (gen?.status === 'done') {
+                      return (
+                        <button
+                          onClick={(e) => viewLeads(e, gen.territoryId)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-status-success/15 border border-status-success/30 text-xs font-semibold text-status-success hover:bg-status-success/25 transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          {gen.count} leads found — view →
+                        </button>
+                      )
+                    }
+                    return (
+                      <button
+                        onClick={(e) => findLeads(e, storm.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-vantage-yellow text-vantage-black text-xs font-bold hover:opacity-90 transition-opacity"
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                        Find leads in this area
+                      </button>
+                    )
+                  })()}
+                  {genStates[storm.id]?.status === 'error' && (
+                    <span className="text-[10px] text-status-critical font-mono">
+                      {(genStates[storm.id] as { message: string }).message}
+                    </span>
+                  )}
                 </div>
 
                 {/* Source attribution */}

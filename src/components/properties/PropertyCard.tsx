@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, ShieldCheck, CalendarDays, Plus, MapPin } from 'lucide-react'
+import { Home, CalendarDays, Plus, MapPin } from 'lucide-react'
 import type { Property, LeadStatus } from '@/lib/types'
 import { leadScoreLabel, STATUS_META } from '@/lib/lead-scoring'
 
@@ -13,22 +13,6 @@ const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: 'closed',        label: 'Closed' },
   { value: 'not_qualified', label: 'Not Qualified' },
 ]
-
-function DamageBar({ score }: { score: number }) {
-  const pct = (score / 10) * 100
-  const color =
-    score >= 8 ? '#EF4444' :
-    score >= 6 ? '#F97316' :
-    score >= 4 ? '#F0C020' : '#6B7280'
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-vantage-border rounded-full overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-      <span className="text-xs font-mono text-vantage-muted w-7 text-right">{score}</span>
-    </div>
-  )
-}
 
 type Props = {
   property: Property
@@ -86,26 +70,10 @@ export default function PropertyCard({ property, rank, status, onStatusChange, s
 
         {/* Meta row */}
         <div className="flex items-center gap-4 text-xs text-vantage-faint flex-wrap">
-          {property.insuranceCarrier ? (
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3" />
-              {property.insuranceCarrier}
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 opacity-50">
-              <ShieldCheck className="w-3 h-3" />
-              Insurance unknown
-            </span>
-          )}
           <span className="flex items-center gap-1">
             <CalendarDays className="w-3 h-3" />
             {property.roofAge != null ? `Roof: ~${property.roofAge} yrs` : 'Roof age unknown'}
           </span>
-          {property.claimType && (
-            <span className="px-1.5 py-0.5 rounded border border-vantage-border font-mono text-[10px]">
-              {property.claimType}
-            </span>
-          )}
           {property.distanceKm != null && (
             <span className="flex items-center gap-1">
               <MapPin className="w-3 h-3" />
@@ -125,13 +93,6 @@ export default function PropertyCard({ property, rank, status, onStatusChange, s
           </p>
         )}
 
-        {/* Damage bar — only if we have the data */}
-        {property.damageScore != null && (
-          <div>
-            <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1">Damage Score</p>
-            <DamageBar score={property.damageScore} />
-          </div>
-        )}
       </div>
 
       {/* Right panel */}
@@ -148,11 +109,15 @@ export default function PropertyCard({ property, rank, status, onStatusChange, s
 
         <div className="w-full">
           <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1.5 text-center">Status</p>
-          <div className={`w-full px-2 py-1 rounded border text-center ${statusMeta.cls}`}>
+          <div className="relative">
+            {/* Visible pill — a plain div centers reliably; native selects never quite do */}
+            <div className={`w-full px-2 py-1 rounded border text-center text-[11px] font-semibold ${statusMeta.cls}`}>
+              {statusMeta.label}
+            </div>
             <select
               value={status}
               onChange={(e) => onStatusChange(e.target.value as LeadStatus)}
-              className="w-full bg-transparent text-[11px] font-semibold text-center appearance-none cursor-pointer outline-none"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             >
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value} className="bg-vantage-card text-vantage-text">

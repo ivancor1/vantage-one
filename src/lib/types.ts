@@ -42,7 +42,6 @@ export type Storm = {
   lng: number           // Centroid of report points — not an official storm location
   severity: number      // Vantage severity score (0–10), computed from magnitude
   radiusMeters: number  // Modeled impact radius — not an official storm path
-  estimatedHomes: number // Homes in modeled radius — rough estimate, not NWS data
   affectedZips: string[]
   hailCoreLat: number   // lat of max-magnitude hail LSR report (centroid fallback if wind-only)
   hailCoreLng: number   // lng of max-magnitude hail LSR report
@@ -67,14 +66,18 @@ export type Lead = {
   dataSource: string
   deletedAt?: string | null
   createdAt: string
-  // Satellite + AI roof analysis
+  // Aerial roof-vulnerability read (imagery may predate the storm — a prior, not damage detection)
   satelliteUrl?: string
-  visualRoofScore?: number   // 0–100, null until analyzed
+  visualRoofScore?: number   // 0–100 vulnerability, null until assessed
   aiNotes?: string
   aiAnalyzedAt?: string
-  // Hail swath signals (from storm LSR data)
-  distanceToHailCoreKm?: number  // distance to max-magnitude hail LSR report
-  insideHailSwath?: boolean      // true if within storm radius × 1.5
+  // Per-home hail evidence — IDW over real data points (see lib/hail.ts)
+  spotterHailIn?: number     // inches, from NWS Local Storm Reports
+  radarHailIn?: number       // inches, from NOAA SWDI NEXRAD signatures
+  nearestReportKm?: number   // distance to closest real data point used
+  insideHailSwath?: boolean  // true if a real data point lies within storm radius × 1.5
+  // Roof size (OSM footprint)
+  footprintSqm?: number
   // Area-level enrichment signals (Census ACS + FEMA NRI)
   areaHousingAgeLabel?: string              // 'older' | 'mixed' | 'newer'
   areaHousingAgeScore?: number             // 0–10
@@ -99,9 +102,6 @@ export type Property = {
   // Optional — not available from all sources
   distanceKm?: number    // Distance from storm centroid, Vantage computed
   roofAge?: number       // Years since construction
-  damageScore?: number   // Vantage damage model (0–10)
-  insuranceCarrier?: string
-  claimType?: string
   aiNotes?: string
   satelliteUrl?: string
   dataSource?: string    // e.g. "OpenStreetMap"

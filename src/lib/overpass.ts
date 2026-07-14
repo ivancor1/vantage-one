@@ -12,6 +12,7 @@ export type TerritoryBuilding = {
   distanceKm: number
   yearBuilt?: number
   roofAge?: number   // capped at 20 for scoring — use yearBuilt for display
+  footprintSqm?: number // OSM building footprint area — roof/job size estimate
   baseScore: number
 }
 
@@ -28,7 +29,23 @@ type OverpassElement = {
   lat?: number
   lon?: number
   center?: { lat: number; lon: number }
+  geometry?: { lat: number; lon: number }[]  // present with `out geom` (ways)
   tags?: Record<string, string>
+}
+
+/** Shoelace area of a building footprint polygon, in m² (lat/lng → local meters). */
+function polygonAreaSqm(geom: { lat: number; lon: number }[]): number {
+  if (geom.length < 3) return 0
+  const lat0 = (geom[0].lat * Math.PI) / 180
+  const mPerDegLat = 111_320
+  const mPerDegLng = 111_320 * Math.cos(lat0)
+  let area = 0
+  for (let i = 0; i < geom.length; i++) {
+    const a = geom[i]
+    const b = geom[(i + 1) % geom.length]
+    area += (a.lon * mPerDegLng) * (b.lat * mPerDegLat) - (b.lon * mPerDegLng) * (a.lat * mPerDegLat)
+  }
+  return Math.abs(area / 2)
 }
 
 function formatAddress(tags: Record<string, string>): string {
@@ -48,6 +65,38 @@ function distKm(lat1: number, lng1: number, lat2: number, lng2: number): number 
   const dlat = (lat2 - lat1) * 111
   const dlng = (lng2 - lng1) * 111 * Math.cos((lat1 * Math.PI) / 180)
   return Math.sqrt(dlat * dlat + dlng * dlng)
+}
+
+// The public Overpass servers 504/429 under load. Try the main instance, then a mirror,
+// with backoff — a scan that fails because a shared server hiccuped is not acceptable UX.
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass-api.de/api/interpreter',
+]
+
+async function fetchOverpass(query: string): Promise<{ elements: OverpassElement[] }> {
+  let lastErr: Error = new Error('Overpass unavailable')
+  for (let attempt = 0; attempt < OVERPASS_ENDPOINTS.length; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 3000))
+    try {
+      const res = await fetch(`${OVERPASS_ENDPOINTS[attempt]}?data=${encodeURIComponent(query)}`, {
+        headers: { 'Accept': '*/*', 'User-Agent': 'vantage-app/1.0' },
+        signal: AbortSignal.timeout(45_000),
+      })
+      if (!res.ok) { lastErr = new Error(`Overpass ${res.status}`); continue }
+      const data = await res.json()
+      // Overpass can 200 with zero elements + a "remark" when it ran out of time — retry those
+      if (data?.remark && !(data.elements ?? []).length) {
+        lastErr = new Error(`Overpass remark: ${data.remark}`)
+        continue
+      }
+      return { elements: (data.elements ?? []) as OverpassElement[] }
+    } catch (err) {
+      lastErr = err as Error
+    }
+  }
+  throw lastErr
 }
 
 /** Vantage lead score for an OSM property. Not an official damage assessment. */
@@ -85,18 +134,7 @@ export async function fetchPropertiesNearStorm(
 );
 out center qt 75;`
 
-  const url =
-    `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
-
-  const res = await fetch(url, {
-    headers: { 'Accept': '*/*', 'User-Agent': 'vantage-app/1.0' },
-    next: { revalidate: 21600 }, // 6-hour cache — building data is stable
-  })
-
-  if (!res.ok) throw new Error(`Overpass API returned ${res.status}`)
-
-  const data = await res.json()
-  const elements: OverpassElement[] = data.elements ?? []
+  const { elements } = await fetchOverpass(query)
 
   const properties: Property[] = []
 
@@ -156,22 +194,15 @@ export async function fetchBuildingsInTerritory(
   const queryRadius = Math.min(radiusMeters, 16093)
   const radiusKm = queryRadius / 1000
 
+  // `out geom` returns way geometry so we can measure each building footprint (roof size)
   const query = `[out:json][timeout:30];
 (
   way["building"]["addr:housenumber"]["addr:street"](around:${queryRadius},${lat},${lng});
   node["building"]["addr:housenumber"]["addr:street"](around:${queryRadius},${lat},${lng});
 );
-out center qt 50;`
+out geom qt 120;`
 
-  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
-  const res = await fetch(url, {
-    headers: { 'Accept': '*/*', 'User-Agent': 'vantage-app/1.0' },
-  })
-
-  if (!res.ok) throw new Error(`Overpass API returned ${res.status}`)
-
-  const data = await res.json()
-  const elements: OverpassElement[] = data.elements ?? []
+  const { elements } = await fetchOverpass(query)
   const currentYear = new Date().getFullYear()
   const buildings: TerritoryBuilding[] = []
 
@@ -180,9 +211,15 @@ out center qt 50;`
     const address = formatAddress(tags)
     if (!address) continue
 
-    const elLat = el.lat ?? el.center?.lat
-    const elLng = el.lon ?? el.center?.lon
+    // `out geom` gives way vertices (no center) — use the vertex mean as the point
+    const geom = el.geometry?.length ? el.geometry : undefined
+    const elLat = el.lat ?? el.center?.lat ??
+      (geom ? geom.reduce((s, p) => s + p.lat, 0) / geom.length : undefined)
+    const elLng = el.lon ?? el.center?.lon ??
+      (geom ? geom.reduce((s, p) => s + p.lon, 0) / geom.length : undefined)
     if (elLat == null || elLng == null) continue
+
+    const footprint = geom ? Math.round(polygonAreaSqm(geom)) : undefined
 
     const dist = distKm(lat, lng, elLat, elLng)
 
@@ -205,6 +242,8 @@ out center qt 50;`
       distanceKm: Math.round(dist * 10) / 10,
       yearBuilt,
       roofAge,
+      // Ignore implausibly small polygons (sheds, bad tags)
+      footprintSqm: footprint && footprint >= 40 ? footprint : undefined,
       baseScore: computeBaseScore(dist, radiusKm, roofAge ?? null),
     })
   }

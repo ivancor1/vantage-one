@@ -66,20 +66,31 @@ async function fetchCensusHousingAge(stateFp: string, countyFp: string, tract: s
     'B25034_011E', // pre-1940
   ].join(',')
 
-  const url = `https://api.census.gov/data/2022/acs/acs5?get=${fields}&for=tract:${tract}&in=state:${stateFp}%20county:${countyFp}`
+  // The ACS data API now REQUIRES a free key — without it, requests 302-redirect to a
+  // "Missing Key" HTML page (which silently broke all housing-age enrichment). Get one free
+  // at https://api.census.gov/data/key_signup.html and set CENSUS_API_KEY.
+  const key = process.env.CENSUS_API_KEY
+  const url = `https://api.census.gov/data/2022/acs/acs5?get=${fields}&for=tract:${tract}&in=state:${stateFp}%20county:${countyFp}${key ? `&key=${key}` : ''}`
   const res = await fetch(url, { headers: { 'User-Agent': 'vantage-app/1.0' } })
   if (!res.ok) {
     console.error('[census] ACS HTTP', res.status, url)
     return null
   }
 
-  // Census returns [[header_row], [data_row]] — but some states (e.g. CT planning regions)
-  // return an HTML error page with status 200, so we guard against non-JSON responses.
+  // Detect the missing-key redirect (and other HTML error pages) before trying to parse JSON.
+  if (res.redirected || !(res.headers.get('content-type') ?? '').includes('json')) {
+    console.error(key
+      ? '[census] ACS returned non-JSON (unsupported FIPS or bad key)'
+      : '[census] ACS requires a key — set CENSUS_API_KEY (free: https://api.census.gov/data/key_signup.html)')
+    return null
+  }
+
+  // Census returns [[header_row], [data_row]].
   let rows: string[][]
   try {
     rows = await res.json()
   } catch {
-    console.error('[census] ACS returned non-JSON (possibly unsupported county/region FIPS)', url)
+    console.error('[census] ACS returned non-JSON', url)
     return null
   }
   if (!rows || rows.length < 2) return null

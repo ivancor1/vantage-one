@@ -115,7 +115,6 @@ export async function fetchStorms(): Promise<Storm[]> {
     const maxDist = Math.max(...reports.map((r) => distKm(lat, lng, r.lat, r.lng)), 5)
     const radiusMeters = Math.max(maxDist * 1000, 5000)
     const severity = computeSeverity(maxHail, maxWind)
-    const estimatedHomes = Math.max(50, Math.round(reports.length * 120 * (severity / 5)))
 
     const date = gf[0]?.properties.valid?.slice(0, 10) ?? id.slice(id.indexOf('-') + 1)
 
@@ -134,7 +133,6 @@ export async function fetchStorms(): Promise<Storm[]> {
       lng,
       severity,
       radiusMeters,
-      estimatedHomes,
       affectedZips: [],
       hailCoreLat: hail[0]?.lat ?? lat,  // strongest hail report; centroid fallback for wind-only
       hailCoreLng: hail[0]?.lng ?? lng,

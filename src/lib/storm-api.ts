@@ -24,7 +24,6 @@ function fromRow(row: Record<string, unknown>): Storm {
     reportCount: row.report_count as number,
     severity: row.severity as number,
     radiusMeters: row.radius_meters as number,
-    estimatedHomes: row.estimated_homes as number,
     affectedZips: [],
     reports: (row.reports as LsrReport[]) ?? [],
     hailCoreLat: (row.hail_core_lat as number | null) ?? (row.lat as number),

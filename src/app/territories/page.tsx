@@ -1,10 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { MapPin, Plus, Trash2, CloudLightning, AlertCircle, Loader2, CheckCircle2, XCircle, Building2, Zap, Sparkles } from 'lucide-react'
+import { MapPin, Plus, Trash2, CloudLightning, AlertCircle, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import clsx from 'clsx'
 import { useTerritoriesStore, activeStormsForTerritory, type TerritoryType } from '@/lib/territories'
-import type { EnrichedLead } from '@/lib/fulton-enrichment'
 import { useStorms } from '@/lib/storm-api'
 
 const TYPE_OPTIONS: { value: TerritoryType; label: string }[] = [
@@ -27,47 +26,6 @@ export default function TerritoriesPage() {
   const [radius, setRadius] = useState(3)
   const [error, setError] = useState('')
   const [adding, setAdding] = useState(false)
-
-  // Per-territory enrich state
-  type EnrichResult = { supported: boolean; county: string; enriched?: number; year_built_found?: number; reason?: string }
-  const [enrichingId, setEnrichingId] = useState<string | null>(null)
-  const [enrichResults, setEnrichResults] = useState<Record<string, EnrichResult>>({})
-
-  async function runTerritoryEnrich(territoryId: string) {
-    setEnrichingId(territoryId)
-    try {
-      const res = await fetch(`/api/territories/${territoryId}/enrich`)
-      const data = await res.json() as EnrichResult
-      setEnrichResults((prev) => ({ ...prev, [territoryId]: data }))
-    } catch {
-      setEnrichResults((prev) => ({ ...prev, [territoryId]: { supported: false, county: '', reason: 'Request failed' } }))
-    } finally {
-      setEnrichingId(null)
-    }
-  }
-
-  const [enrichedLeads, setEnrichedLeads] = useState<EnrichedLead[]>([])
-  const [enrichmentLoading, setEnrichmentLoading] = useState(false)
-  const [enrichmentError, setEnrichmentError] = useState('')
-  const [enrichmentMeta, setEnrichmentMeta] = useState<{ total: number; enriched: number; residential: number } | null>(null)
-
-  async function runEnrichment() {
-    setEnrichmentLoading(true)
-    setEnrichmentError('')
-    setEnrichedLeads([])
-    setEnrichmentMeta(null)
-    try {
-      const res = await fetch('/api/territories/enrich-alpharetta')
-      if (!res.ok) throw new Error(`API returned ${res.status}`)
-      const data = await res.json() as { leads: EnrichedLead[]; total: number; enriched: number; residential: number }
-      setEnrichedLeads(data.leads)
-      setEnrichmentMeta({ total: data.total, enriched: data.enriched, residential: data.residential })
-    } catch (e) {
-      setEnrichmentError(e instanceof Error ? e.message : 'Failed to enrich leads')
-    } finally {
-      setEnrichmentLoading(false)
-    }
-  }
 
   async function handleAdd() {
     const trimmed = value.trim()
@@ -93,7 +51,7 @@ export default function TerritoriesPage() {
                               'e.g. Heritage Oak'
 
   return (
-    <div className="p-8 space-y-6 max-w-3xl">
+    <div className="p-8 space-y-6 max-w-5xl mx-auto">
       <div>
         <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest mb-1">
           Lead Generation
@@ -167,7 +125,7 @@ export default function TerritoriesPage() {
           />
           <div className="flex justify-between text-[10px] text-vantage-faint font-mono">
             <span>1 mi</span>
-            <span className="text-vantage-faint/60">up to 50 leads · larger radius = wider search</span>
+            <span className="text-vantage-faint/60">up to ~120 homes per scan · widen later from the Leads page</span>
             <span>10 mi</span>
           </div>
         </div>
@@ -275,36 +233,6 @@ export default function TerritoriesPage() {
                     Added {addedDate}
                   </span>
 
-                  {/* Enrich button + result */}
-                  {(() => {
-                    const result = enrichResults[territory.id]
-                    const isEnriching = enrichingId === territory.id
-                    return (
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {result && (
-                          <span className={clsx(
-                            'text-[10px] font-mono',
-                            result.supported ? 'text-status-success' : 'text-vantage-faint'
-                          )}>
-                            {result.supported
-                              ? `${result.year_built_found}/${result.enriched} enriched`
-                              : 'not supported'}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => runTerritoryEnrich(territory.id)}
-                          disabled={isEnriching || enrichingId !== null}
-                          className="p-1.5 rounded text-vantage-faint hover:text-vantage-yellow hover:bg-vantage-yellow/10 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                          title="Enrich leads with property age data"
-                        >
-                          {isEnriching
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <Sparkles className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    )
-                  })()}
-
                   {/* Remove */}
                   <button
                     onClick={() => remove(territory.id)}
@@ -319,125 +247,11 @@ export default function TerritoriesPage() {
           </div>
         )}
       </div>
-      {/* Enhanced Territory Test — Alpharetta, GA */}
-      <div className="bg-vantage-card border border-vantage-border rounded-lg overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-vantage-border">
-          <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-vantage-yellow" />
-            <span className="text-sm font-semibold text-vantage-text">Enhanced Territory Test</span>
-            <span className="text-[10px] font-mono text-vantage-faint bg-vantage-surface border border-vantage-border px-1.5 py-0.5 rounded">
-              Alpharetta, GA · ArcGIS Fulton County
-            </span>
-          </div>
-          <button
-            onClick={runEnrichment}
-            disabled={enrichmentLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-vantage-yellow text-vantage-black text-xs font-bold hover:bg-vantage-yellow/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {enrichmentLoading
-              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              : <Zap className="w-3.5 h-3.5" />}
-            {enrichmentLoading ? 'Enriching...' : 'Run Enrichment'}
-          </button>
-        </div>
-
-        {!enrichmentLoading && enrichedLeads.length === 0 && !enrichmentError && (
-          <div className="px-5 py-8 text-center space-y-1">
-            <Building2 className="w-6 h-6 text-vantage-faint mx-auto" />
-            <p className="text-vantage-muted text-sm">No data yet.</p>
-            <p className="text-vantage-faint text-xs">
-              Fetches up to 25 Alpharetta buildings from OpenStreetMap, then enriches each
-              with year built and property type from Fulton County&apos;s public ArcGIS API.
-            </p>
-          </div>
-        )}
-
-        {enrichmentLoading && (
-          <div className="px-5 py-8 text-center space-y-2">
-            <Loader2 className="w-6 h-6 text-vantage-yellow animate-spin mx-auto" />
-            <p className="text-vantage-muted text-sm">Querying Fulton County ArcGIS...</p>
-            <p className="text-vantage-faint text-xs">Enriching up to 25 properties — this takes ~10 seconds.</p>
-          </div>
-        )}
-
-        {enrichmentError && (
-          <div className="px-5 py-4 flex items-center gap-2 text-status-critical text-xs">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            {enrichmentError}
-          </div>
-        )}
-
-        {enrichedLeads.length > 0 && (
-          <>
-            {enrichmentMeta && (
-              <div className="px-5 py-2 border-b border-vantage-border flex items-center gap-4 text-[11px] text-vantage-faint font-mono">
-                <span>{enrichmentMeta.residential} residential leads</span>
-                <span className="text-vantage-faint/40">·</span>
-                <span>screened from {enrichmentMeta.enriched} candidates</span>
-                <span className="text-vantage-faint/40">·</span>
-                <span>{enrichedLeads.filter(l => l.year_built).length} with year built</span>
-              </div>
-            )}
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-vantage-border text-vantage-faint font-mono text-[10px] uppercase tracking-wider">
-                    <th className="text-left px-4 py-2.5 font-medium">Address</th>
-                    <th className="text-right px-3 py-2.5 font-medium">Score</th>
-                    <th className="text-right px-3 py-2.5 font-medium">Year Built</th>
-                    <th className="text-right px-3 py-2.5 font-medium">Age</th>
-                    <th className="text-left px-3 py-2.5 font-medium">Property Type</th>
-                    <th className="text-right px-3 py-2.5 font-medium">Acres</th>
-                    <th className="text-left px-3 py-2.5 font-medium">Parcel ID</th>
-                    <th className="text-center px-3 py-2.5 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-vantage-border/50">
-                  {enrichedLeads.map((lead, i) => (
-                    <tr key={i} className="hover:bg-black/[0.035] transition-colors">
-                      <td className="px-4 py-2.5 text-vantage-text font-mono max-w-[220px]">
-                        <span className="truncate block" title={lead.address}>{lead.address}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <span className={clsx(
-                          'font-bold font-mono',
-                          lead.enriched_score >= 70 ? 'text-status-success' :
-                          lead.enriched_score >= 40 ? 'text-vantage-yellow' :
-                          'text-vantage-muted'
-                        )}>
-                          {lead.enriched_score}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-vantage-text">
-                        {lead.year_built ?? <span className="text-vantage-faint">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-vantage-muted">
-                        {lead.home_age ? `${lead.home_age}y` : <span className="text-vantage-faint">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-vantage-muted max-w-[140px]">
-                        <span className="truncate block" title={lead.property_type ?? undefined}>
-                          {lead.property_type ?? <span className="text-vantage-faint">—</span>}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-vantage-muted">
-                        {lead.land_acres != null ? lead.land_acres.toFixed(2) : <span className="text-vantage-faint">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-[10px] text-vantage-faint">
-                        {lead.parcel_id ?? '—'}
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        {lead.enrichment_status === 'found'
-                          ? <CheckCircle2 className="w-3.5 h-3.5 text-status-success inline" />
-                          : <XCircle className="w-3.5 h-3.5 text-vantage-faint inline" />}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </div>
+      {/* Honest data note */}
+      <p className="text-[10px] text-vantage-faint font-mono leading-relaxed">
+        Roof age comes from OSM building tags where present, otherwise the Census area estimate —
+        the lead card says which was used.
+      </p>
     </div>
   )
 }

@@ -32,8 +32,11 @@ type LeadRow = {
   historical_hail_risk_score: number | null
   historical_hail_risk_label: string | null
   score_confidence: string | null
-  distance_to_hail_core_km: number | null
+  spotter_hail_in: number | null
+  radar_hail_in: number | null
+  nearest_report_km: number | null
   inside_hail_swath: boolean | null
+  footprint_sqm: number | null
   territories?: { value: string } | null
 }
 
@@ -66,8 +69,11 @@ function fromRow(row: LeadRow): Lead {
     historicalHailRiskScore: row.historical_hail_risk_score ?? undefined,
     historicalHailRiskLabel: row.historical_hail_risk_label ?? undefined,
     scoreConfidence: (row.score_confidence ?? undefined) as 'high' | 'medium' | 'low' | undefined,
-    distanceToHailCoreKm: row.distance_to_hail_core_km ?? undefined,
+    spotterHailIn: row.spotter_hail_in ?? undefined,
+    radarHailIn: row.radar_hail_in ?? undefined,
+    nearestReportKm: row.nearest_report_km ?? undefined,
     insideHailSwath: row.inside_hail_swath ?? undefined,
+    footprintSqm: row.footprint_sqm ?? undefined,
     territoryValue: row.territories?.value,
     nearestStormName: undefined,
     nearestStormSeverity: undefined,

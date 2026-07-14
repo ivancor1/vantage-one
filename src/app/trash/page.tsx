@@ -17,7 +17,7 @@ export default function TrashPage() {
   const { leads, loading } = useTrashLeads()
 
   return (
-    <div className="p-8 space-y-6 max-w-4xl">
+    <div className="p-8 space-y-6 max-w-6xl mx-auto">
       <div>
         <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest mb-1">
           Deleted Territories · Leads

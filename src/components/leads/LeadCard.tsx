@@ -1,7 +1,16 @@
 'use client'
 
-import { CalendarDays, CloudLightning, FlaskConical, Home, ScanLine, Loader2 } from 'lucide-react'
+// Clay-style condensed lead row: one scannable line per home — address, hail evidence,
+// roof state, score, status — with the full plain-English detail (sources, roof notes,
+// deliverable actions) one click away. Roofers decide from the row; the expand builds trust.
+
+import { useState } from 'react'
+import {
+  Home, CloudLightning, ScanLine, Loader2, ChevronDown,
+  FileText, PenLine, Eye, Layers, X, Copy, Check,
+} from 'lucide-react'
 import clsx from 'clsx'
+import Link from 'next/link'
 import type { Lead, LeadStatus } from '@/lib/types'
 import { leadScoreLabel, STATUS_META } from '@/lib/lead-scoring'
 
@@ -15,17 +24,29 @@ const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: 'not_qualified', label: 'Not Qualified' },
 ]
 
-function DamageBar({ score }: { score: number }) {
-  const pct = score
-  const color = score >= 70 ? '#EF4444' : score >= 50 ? '#F97316' : score >= 30 ? '#F0C020' : '#4ADE80'
+// Shared grid so the header and every row line up: pick · rank · photo · home · hail · roof · score · status · chevron
+const GRID = 'grid grid-cols-[20px_24px_44px_minmax(0,1fr)_128px_100px_56px_128px_24px] items-center gap-3'
+
+export function LeadListHeader() {
   return (
-    <div className="flex items-center gap-2 w-full">
-      <div className="flex-1 h-1.5 bg-vantage-border rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-      <span className="text-[10px] font-mono font-semibold flex-shrink-0" style={{ color }}>{score}</span>
+    <div className={clsx(GRID, 'px-4 py-2 border-b border-vantage-border bg-vantage-surface')}>
+      <span />
+      <span />
+      <span />
+      <span className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest">Home</span>
+      <span className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest">Hail evidence</span>
+      <span className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest">Roof</span>
+      <span className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest text-right">Score</span>
+      <span className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest text-center">Status</span>
+      <span />
     </div>
   )
+}
+
+function roofRead(score: number): { label: string; cls: string } {
+  if (score >= 60) return { label: 'worn',      cls: 'text-status-high' }
+  if (score >= 35) return { label: 'some wear', cls: 'text-status-elevated' }
+  return               { label: 'looks ok',   cls: 'text-vantage-muted' }
 }
 
 type Props = {
@@ -34,215 +55,287 @@ type Props = {
   onStatusChange: (status: LeadStatus) => void
   analyzing: boolean
   onAnalyze: () => void
-  onAnalyzed: (id: string, visualRoofScore: number, aiNotes: string, leadScore: number) => void
+  // visualRoofScore null = the check FAILED — clear the spinner, change nothing
+  onAnalyzed: (id: string, visualRoofScore: number | null, aiNotes: string, leadScore: number) => void
+  selected: boolean
+  onSelectChange: (selected: boolean) => void
 }
 
-export default function LeadCard({ lead, rank, onStatusChange, analyzing, onAnalyze, onAnalyzed }: Props) {
+export default function LeadCard({ lead, rank, onStatusChange, analyzing, onAnalyze, onAnalyzed, selected, onSelectChange }: Props) {
   const { label: scoreLabel, cls: scoreCls } = leadScoreLabel(lead.leadScore)
-  const statusMeta = STATUS_META[lead.status]
   const streetAddress = lead.address.split(',')[0]
   const cityLine = lead.address.split(',').slice(1).join(',').trim()
-  const hasStorm = lead.stormScore != null && lead.nearestStormName
+  const hasHail = lead.radarHailIn != null || lead.spotterHailIn != null
   const hasAI = lead.visualRoofScore != null
-  const hasCensus = lead.areaHousingAgeLabel != null
-  const hasFema = lead.historicalHailRiskLabel != null
+  const maxHail = Math.max(lead.radarHailIn ?? 0, lead.spotterHailIn ?? 0)
+  const twoSources = lead.radarHailIn != null && lead.spotterHailIn != null
 
-  const scoreSubLabel =
-    hasStorm && hasAI && hasFema ? 'Storm + AI + Hail risk' :
-    hasStorm && hasAI            ? 'Storm + AI score' :
-    hasStorm && hasCensus        ? 'Storm + Area signal' :
-    hasStorm                     ? 'Storm score' :
-    hasAI                        ? 'AI visual score' :
-    hasCensus                    ? 'Area signal score' :
-                                   'Base score'
+  const [expanded, setExpanded] = useState(false)
+  const [imgOk, setImgOk] = useState(true) // expired/broken Mapbox tile → house icon, not a broken img
+  const [letterOpen, setLetterOpen] = useState(false)
+  const [letterText, setLetterText] = useState<string | null>(null)
+  const [letterLoading, setLetterLoading] = useState(false)
+  const [letterCopied, setLetterCopied] = useState(false)
 
-  const confidenceDot =
-    lead.scoreConfidence === 'high'   ? 'bg-status-success' :
-    lead.scoreConfidence === 'medium' ? 'bg-vantage-yellow' :
-    lead.scoreConfidence === 'low'    ? 'bg-vantage-faint' : null
-
-  async function handleAnalyze() {
+  async function handleAnalyze(e?: React.MouseEvent) {
+    e?.stopPropagation()
     onAnalyze()
     try {
       const res = await fetch(`/api/leads/${lead.id}/analyze`, { method: 'POST' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json() as { cached?: boolean; visualRoofScore: number; aiNotes?: string; leadScore?: number }
-      onAnalyzed(
-        lead.id,
-        data.visualRoofScore,
-        data.aiNotes ?? '',
-        data.leadScore ?? lead.leadScore,
-      )
+      const data = await res.json() as { visualRoofScore: number; aiNotes?: string; leadScore?: number }
+      onAnalyzed(lead.id, data.visualRoofScore, data.aiNotes ?? '', data.leadScore ?? lead.leadScore)
     } catch (err) {
       console.error('[analyze]', err)
-      // signal done with no change so spinner clears
-      onAnalyzed(lead.id, lead.visualRoofScore ?? 0, lead.aiNotes ?? '', lead.leadScore)
+      // Failed check ≠ "score 0 / looks ok" — report failure so nothing is written
+      onAnalyzed(lead.id, lead.visualRoofScore ?? null, lead.aiNotes ?? '', lead.leadScore)
     }
   }
 
+  async function openLetter(e: React.MouseEvent) {
+    e.stopPropagation()
+    setLetterOpen(true)
+    if (letterText || letterLoading) return
+    setLetterLoading(true)
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/letter`, { method: 'POST' })
+      const data = await res.json()
+      setLetterText(res.ok && data.letter ? data.letter : 'Could not draft the notice — try again.')
+    } catch {
+      setLetterText('Could not draft the notice — try again.')
+    } finally {
+      setLetterLoading(false)
+    }
+  }
+
+  async function copyLetter() {
+    if (!letterText) return
+    try {
+      await navigator.clipboard.writeText(letterText)
+      setLetterCopied(true)
+      setTimeout(() => setLetterCopied(false), 1300)
+    } catch { /* ignore */ }
+  }
+
   return (
-    <div className="bg-vantage-card border border-vantage-border rounded-lg overflow-hidden flex hover:border-vantage-bright transition-colors">
+    <div className="bg-vantage-card">
 
-      {/* Rank stripe */}
-      <div className="w-8 flex-shrink-0 flex items-start justify-center pt-4 bg-vantage-surface border-r border-vantage-border">
-        <span className="text-xs font-mono text-vantage-faint">{rank}</span>
-      </div>
-
-      {/* Satellite thumbnail */}
-      <div className="w-[100px] flex-shrink-0 border-r border-vantage-border overflow-hidden">
-        {lead.satelliteUrl ? (
-          <img
-            src={lead.satelliteUrl}
-            alt="Current roof view"
-            className="w-full h-full object-cover"
-            style={{ minHeight: '100px' }}
+      {/* ── The row ─────────────────────────────────────────────── */}
+      <div
+        onClick={() => setExpanded((v) => !v)}
+        className={clsx(GRID, 'px-4 py-2.5 cursor-pointer hover:bg-black/[0.03] transition-colors', selected && 'bg-vantage-yellow-dim')}
+      >
+        <span onClick={(e) => e.stopPropagation()} className="flex items-center justify-center">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(e) => onSelectChange(e.target.checked)}
+            title="Pick this home for a route"
+            className="w-3.5 h-3.5 accent-vantage-yellow cursor-pointer"
           />
+        </span>
+        <span className="text-xs font-mono text-vantage-faint text-center">{rank}</span>
+
+        {lead.satelliteUrl && imgOk ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={lead.satelliteUrl} alt="" onError={() => setImgOk(false)} className="w-11 h-11 rounded object-cover border border-vantage-border" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-vantage-surface" style={{ minHeight: '100px' }}>
-            <Home className="w-6 h-6 text-vantage-faint" />
-          </div>
-        )}
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 min-w-0 px-4 py-3 flex flex-col gap-2">
-
-        {/* Address + territory badge */}
-        <div>
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-semibold text-vantage-text">{streetAddress}</p>
-            {lead.territoryValue && (
-              <span className="text-[10px] font-mono text-vantage-faint border border-vantage-border rounded px-1.5 py-0.5 flex-shrink-0 whitespace-nowrap">
-                {lead.territoryValue}
-              </span>
-            )}
-          </div>
-          {cityLine && <p className="text-xs text-vantage-muted">{cityLine}</p>}
-        </div>
-
-        {/* Meta row */}
-        <div className="flex flex-col gap-1 text-xs text-vantage-faint">
-          <div className="flex items-center gap-4 flex-wrap">
-            <span className="flex items-center gap-1">
-              <CalendarDays className="w-3 h-3" />
-              {lead.yearBuilt
-                ? `Built ${lead.yearBuilt} · Age est. ${new Date().getFullYear() - lead.yearBuilt} yrs`
-                : lead.areaHousingAgeLabel
-                  ? `Area housing stock: ${lead.areaHousingAgeLabel.charAt(0).toUpperCase() + lead.areaHousingAgeLabel.slice(1)}`
-                  : 'Year unknown'}
-            </span>
-            {lead.distanceToHailCoreKm != null ? (
-              <span className="flex items-center gap-1">
-                <CloudLightning className="w-3 h-3 text-status-critical/60" />
-                {lead.distanceToHailCoreKm} km from hail core
-                {lead.insideHailSwath === false && (
-                  <span className="text-[9px] font-mono text-vantage-faint/60 ml-1">outside primary swath</span>
-                )}
-              </span>
-            ) : lead.distanceToStormKm != null ? (
-              <span className="flex items-center gap-1">
-                <CloudLightning className="w-3 h-3 text-status-critical/60" />
-                {lead.distanceToStormKm} km from storm
-              </span>
-            ) : null}
-          </div>
-          {!lead.yearBuilt && lead.areaHousingAgeLabel && (
-            <span className="text-[9px] font-mono text-vantage-faint/60">source: Census ACS 5-yr · area-level</span>
-          )}
-          {lead.historicalHailRiskLabel && (
-            <div className="flex flex-col gap-0.5">
-              <span className="flex items-center gap-1">
-                <CloudLightning className="w-3 h-3 text-vantage-yellow/70" />
-                Historical hail: {lead.historicalHailRiskLabel}
-              </span>
-              <span className="text-[9px] font-mono text-vantage-faint/60">source: FEMA National Risk Index</span>
-            </div>
-          )}
-        </div>
-
-        {/* Score context */}
-        {hasStorm ? (
-          <div className="flex items-center gap-1.5">
-            <CloudLightning className="w-3 h-3 text-status-critical flex-shrink-0" />
-            <p className="text-[10px] text-status-critical/80 font-mono">
-              Storm-adjusted · {lead.nearestStormName}
-              {lead.nearestStormSeverity != null && ` · severity ${lead.nearestStormSeverity}`}
-            </p>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <FlaskConical className="w-3 h-3 text-vantage-faint flex-shrink-0" />
-            <p className="text-[10px] text-vantage-faint font-mono">
-              No recent storm match · Score based on property &amp; roof factors only
-            </p>
-          </div>
+          <span className="w-11 h-11 rounded bg-vantage-surface border border-vantage-border flex items-center justify-center">
+            <Home className="w-4 h-4 text-vantage-faint" />
+          </span>
         )}
 
-        {/* AI analysis block */}
-        {hasAI ? (
-          <div className="space-y-1.5 pt-0.5">
-            <DamageBar score={lead.visualRoofScore!} />
-            {lead.aiNotes && (
-              <p className="text-[10px] text-vantage-muted leading-snug line-clamp-2">{lead.aiNotes}</p>
-            )}
-            <p className="text-[9px] text-vantage-faint font-mono">
-              AI visual assessment · not a confirmed inspection
-            </p>
-          </div>
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-vantage-text truncate">{streetAddress}</span>
+          <span className="block text-[10px] text-vantage-faint truncate">{cityLine}</span>
+        </span>
+
+        {hasHail ? (
+          <span className="flex items-center gap-1.5 text-xs text-vantage-text">
+            <CloudLightning className="w-3.5 h-3.5 text-status-critical/70 flex-shrink-0" />
+            <span className="font-mono font-semibold">{maxHail.toFixed(1)}″</span>
+            <span className="text-vantage-muted">{twoSources ? '· 2 sources' : lead.radarHailIn != null ? '· radar' : '· reported'}</span>
+          </span>
+        ) : (
+          <span className="text-xs text-vantage-faint">—</span>
+        )}
+
+        {analyzing ? (
+          <span className="flex items-center gap-1.5 text-[11px] text-vantage-muted">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> checking…
+          </span>
+        ) : hasAI ? (
+          <span className={clsx('flex items-center gap-1 text-[11px] font-medium', roofRead(lead.visualRoofScore!).cls)}>
+            <Check className="w-3 h-3" /> {roofRead(lead.visualRoofScore!).label}
+          </span>
         ) : lead.satelliteUrl ? (
           <button
             onClick={handleAnalyze}
-            disabled={analyzing}
-            className="flex items-center gap-1.5 self-start px-2.5 py-1 rounded border border-vantage-border text-[10px] text-vantage-muted hover:border-vantage-bright hover:text-vantage-text transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="justify-self-start flex items-center gap-1 px-2 py-1 rounded border border-vantage-border text-[10px] text-vantage-muted hover:border-vantage-bright hover:text-vantage-text transition-colors"
           >
-            {analyzing
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : <ScanLine className="w-3 h-3" />
-            }
-            {analyzing ? 'Analyzing...' : 'Analyze Roof'}
+            <ScanLine className="w-3 h-3" /> Check
           </button>
-        ) : null}
+        ) : (
+          <span className="text-xs text-vantage-faint">—</span>
+        )}
+
+        <span className="text-right">
+          <span className={clsx('block text-lg font-bold font-mono leading-none', scoreCls)}>{lead.leadScore}</span>
+          <span className={clsx('block text-[8px] font-bold tracking-widest', scoreCls)}>{scoreLabel}</span>
+        </span>
+
+        <span onClick={(e) => e.stopPropagation()} className="relative block">
+          {/* Visible pill — a plain span centers reliably; native selects never quite do */}
+          <span className={clsx('block w-full px-1.5 py-1 rounded border text-center text-[10px] font-semibold', STATUS_META[lead.status].cls)}>
+            {STATUS_META[lead.status].label}
+          </span>
+          <select
+            value={lead.status}
+            onChange={(e) => onStatusChange(e.target.value as LeadStatus)}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          >
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value} className="bg-vantage-card text-vantage-text">
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </span>
+
+        <ChevronDown className={clsx('w-4 h-4 text-vantage-faint transition-transform', expanded && 'rotate-180')} />
       </div>
 
-      {/* Right panel */}
-      <div className="w-[140px] flex-shrink-0 flex flex-col items-center justify-between py-4 px-3 border-l border-vantage-border gap-3">
-        <div className="text-center">
-          <p className={clsx('text-4xl font-bold font-mono leading-none', scoreCls)}>
-            {lead.leadScore}
-          </p>
-          <p className={clsx('text-[10px] font-bold tracking-widest mt-1', scoreCls)}>
-            {scoreLabel}
-          </p>
-          <p className="text-[9px] text-vantage-faint mt-0.5 font-mono">
-            {scoreSubLabel}
-          </p>
-          {confidenceDot && (
-            <div className="flex items-center justify-center gap-1 mt-1" title="Score confidence based on available data signals">
-              <div className={clsx('w-1.5 h-1.5 rounded-full', confidenceDot)} />
-              <span className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest">
-                {lead.scoreConfidence}
-              </span>
-            </div>
-          )}
-        </div>
+      {/* ── Expanded detail — plain English, sources in the fine print ── */}
+      {expanded && (
+        <div className="px-4 pb-4 pt-1 border-t border-vantage-border/60 bg-vantage-surface/50">
+          <div className="flex gap-5 items-start pt-3">
+            {lead.satelliteUrl && imgOk && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={lead.satelliteUrl} alt="Aerial view" onError={() => setImgOk(false)} className="w-[140px] rounded border border-vantage-border flex-shrink-0" />
+            )}
 
-        <div className="w-full">
-          <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1.5 text-center">Status</p>
-          <div className={clsx('w-full px-2 py-1 rounded border text-center', statusMeta.cls)}>
-            <select
-              value={lead.status}
-              onChange={(e) => onStatusChange(e.target.value as LeadStatus)}
-              className="w-full bg-transparent text-[11px] font-semibold text-center appearance-none cursor-pointer outline-none"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-vantage-card text-vantage-text">
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex-1 min-w-0 space-y-2.5 text-xs">
+              {hasHail && (
+                <div>
+                  <p className="text-vantage-text">
+                    <span className="font-semibold">Hail at this address:</span>
+                    {lead.radarHailIn != null && ` radar estimate ${lead.radarHailIn}″`}
+                    {lead.radarHailIn != null && lead.spotterHailIn != null && ' · '}
+                    {lead.spotterHailIn != null && `spotter report ${lead.spotterHailIn}″`}
+                    {lead.nearestReportKm != null && ` · nearest data point ${lead.nearestReportKm} km away`}
+                  </p>
+                  <p className="text-[9px] font-mono text-vantage-faint mt-0.5">
+                    NOAA NEXRAD radar · NWS storm reports · interpolated to this address
+                  </p>
+                </div>
+              )}
+              {!hasHail && (
+                <p className="text-vantage-muted">No hail evidence near this home — score is from property &amp; area factors only.</p>
+              )}
+
+              {hasAI && (
+                <div>
+                  <p className="text-vantage-text">
+                    <span className="font-semibold">Roof from above:</span> {lead.aiNotes || roofRead(lead.visualRoofScore!).label}
+                  </p>
+                  <p className="text-[9px] font-mono text-vantage-faint mt-0.5">
+                    AI read of aerial imagery · may predate the storm · not an inspection
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-vantage-muted">
+                  {lead.yearBuilt ? `Built ${lead.yearBuilt}` : 'Build year unknown'}
+                  {lead.footprintSqm != null && ` · ≈ ${Math.round((lead.footprintSqm * 1.15) / 9.29)} roofing squares`}
+                  {lead.areaHousingAgeLabel && ` · area housing: ${lead.areaHousingAgeLabel}`}
+                  {lead.historicalHailRiskLabel && ` · hail history: ${lead.historicalHailRiskLabel.toLowerCase()}`}
+                </p>
+                <p className="text-[9px] font-mono text-vantage-faint mt-0.5">
+                  OpenStreetMap · Census ACS (area) · FEMA National Risk Index (county)
+                </p>
+              </div>
+
+              {lead.nearestStormName && (
+                <p className="text-[10px] font-mono text-status-critical/80">
+                  Storm: {lead.nearestStormName}
+                </p>
+              )}
+            </div>
+
+            {/* Actions — labeled, since there's room here */}
+            <div className="flex flex-col gap-1.5 flex-shrink-0 w-[150px]" onClick={(e) => e.stopPropagation()}>
+              <Link
+                href={`/leads/${lead.id}/report`}
+                target="_blank"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-vantage-border text-[11px] text-vantage-muted hover:border-vantage-bright hover:text-vantage-text transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" /> Evidence report
+              </Link>
+              <button
+                onClick={openLetter}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-vantage-border text-[11px] text-vantage-muted hover:border-vantage-bright hover:text-vantage-text transition-colors"
+              >
+                <PenLine className="w-3.5 h-3.5" /> Draft letter
+              </button>
+              <a
+                href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lead.lat},${lead.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-vantage-border text-[11px] text-vantage-muted hover:border-vantage-bright hover:text-vantage-text transition-colors"
+              >
+                <Eye className="w-3.5 h-3.5" /> Street view
+              </a>
+              <Link
+                href="/shingle-analysis"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-vantage-border text-[11px] text-vantage-muted hover:border-vantage-bright hover:text-vantage-text transition-colors"
+              >
+                <Layers className="w-3.5 h-3.5" /> Shingle lookup
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ── Homeowner-notice modal ── */}
+      {letterOpen && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/40" onClick={() => setLetterOpen(false)}>
+          <div
+            className="bg-vantage-card border border-vantage-border rounded-lg w-[480px] max-w-[92vw] p-5 space-y-3 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-vantage-text">Homeowner notice — {streetAddress}</p>
+              <button onClick={() => setLetterOpen(false)} className="p-1 rounded text-vantage-faint hover:text-vantage-text">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {letterLoading ? (
+              <div className="py-8 text-center text-vantage-faint text-xs font-mono flex items-center justify-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> drafting from this home&apos;s hail data…
+              </div>
+            ) : (
+              <>
+                <textarea
+                  readOnly
+                  value={letterText ?? ''}
+                  className="w-full h-48 bg-vantage-surface border border-vantage-border rounded p-3 text-xs text-vantage-text leading-relaxed resize-none outline-none"
+                />
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] text-vantage-faint font-mono">drafted from NOAA/NWS data · review before use</p>
+                  <button
+                    onClick={copyLetter}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-vantage-yellow text-vantage-black text-xs font-bold hover:opacity-90 transition-opacity"
+                  >
+                    {letterCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    {letterCopied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

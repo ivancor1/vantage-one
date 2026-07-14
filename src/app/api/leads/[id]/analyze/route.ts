@@ -5,10 +5,19 @@ import { computeCompositeScore } from '@/lib/lead-scoring'
 
 const client = new OpenAI()
 
+// Honest framing: this is a coarse AERIAL VULNERABILITY read, not damage detection.
+// The imagery is a low-resolution top-down tile that may PREDATE the storm — hail damage
+// is physically unresolvable here. What it CAN see: age/wear signals that make a roof more
+// likely to be damaged (and more claim-worthy) when real hail is confirmed overhead.
 const PROMPT =
-  'Analyze this satellite image of a residential roof for visible condition issues. ' +
-  'Return ONLY valid JSON: {"score": <0-10 integer>, "notes": "<one sentence>"}. ' +
-  '0 = excellent condition, 10 = severe damage visible. Be conservative and factual.'
+  'You are looking at a low-resolution top-down aerial tile of a residential roof. ' +
+  'The image may be months or years old and may predate any recent storm. ' +
+  'Do NOT claim storm or hail damage — it is not visible at this resolution. ' +
+  'Rate only visible VULNERABILITY: apparent aging or discoloration, patching or tarps, ' +
+  'missing or uneven material, complex/older roof geometry, heavy tree overhang. ' +
+  'Return ONLY valid JSON: {"score": <0-10 integer>, "notes": "<one sentence about what is visible>"}. ' +
+  '0 = appears new/clean, 10 = clearly worn/aged roof with high damage probability if hit. ' +
+  'Be conservative and factual; never mention damage or storms in the notes.'
 
 async function analyzeWithUrl(imageUrl: string): Promise<{ score: number; notes: string }> {
   const msg = await client.chat.completions.create({
@@ -61,7 +70,7 @@ export async function POST(
 
   const { data: lead, error: fetchErr } = await supabase
     .from('leads')
-    .select('id, lat, lng, satellite_url, visual_roof_score, storm_score, base_score, roof_age, area_housing_age_score, historical_hail_risk_score, nearest_storm_id, distance_to_storm_km')
+    .select('id, lat, lng, satellite_url, visual_roof_score, roof_age, area_housing_age_score, historical_hail_risk_score, spotter_hail_in, radar_hail_in')
     .eq('id', id)
     .single()
 
@@ -87,37 +96,15 @@ export async function POST(
   const visualRoofScore = Math.min(100, Math.max(0, Math.round(result.score * 10)))
   const aiNotes = result.notes
 
-  // Re-fetch storm signals so the composite formula gets hail core proximity
-  let stormSeverity: number | undefined
-  let distanceToHailCoreKm: number | undefined
-  let stormRadiusKm: number | undefined
-  if (lead.nearest_storm_id) {
-    const { data: storm } = await supabase
-      .from('storms')
-      .select('severity, radius_meters, lat, lng, hail_core_lat, hail_core_lng')
-      .eq('id', lead.nearest_storm_id)
-      .single()
-    if (storm) {
-      stormSeverity = storm.severity
-      stormRadiusKm = storm.radius_meters / 1000
-      const hailCoreLat = (storm.hail_core_lat as number | null) ?? storm.lat
-      const hailCoreLng = (storm.hail_core_lng as number | null) ?? storm.lng
-
-      // Compute distance from lead to hail core using flat-earth approximation
-      const dlat = (lead.lat - hailCoreLat) * 111
-      const dlng = (lead.lng - hailCoreLng) * 111 * Math.cos((lead.lat * Math.PI) / 180)
-      distanceToHailCoreKm = Math.sqrt(dlat * dlat + dlng * dlng)
-    }
-  }
-
+  // Rescore from the lead's stored REAL hail evidence (per-home IDW values) + the new
+  // vulnerability read — no storm-wide numbers, no fabricated proximity.
   const newLeadScore = computeCompositeScore({
-    stormSeverity,
-    distanceToHailCoreKm,
-    stormRadiusKm,
+    spotterHailIn: lead.spotter_hail_in ?? undefined,
+    radarHailIn: lead.radar_hail_in ?? undefined,
+    vulnerabilityScore: visualRoofScore,
     roofAge: lead.roof_age ?? undefined,
     areaHousingAgeScore: lead.area_housing_age_score ?? undefined,
     hailRiskScore: lead.historical_hail_risk_score ?? undefined,
-    visualRoofScore,
   })
 
   const { error: updateErr } = await supabase
@@ -127,7 +114,8 @@ export async function POST(
       ai_notes: aiNotes,
       ai_analyzed_at: new Date().toISOString(),
       lead_score: newLeadScore,
-      score_confidence: 'high',
+      // Aerial-only read of possibly pre-storm imagery — never "high" on its own
+      score_confidence: 'low',
     })
     .eq('id', id)
 

@@ -101,8 +101,8 @@ export default function StormDetailPanel({ storm, onClose }: Props) {
             <p className="text-lg font-bold font-mono text-vantage-yellow">{storm.severity}</p>
           </div>
           <div className="flex flex-col gap-1">
-            <p className="text-[10px] text-vantage-faint uppercase tracking-wider">Homes in Radius</p>
-            <p className="text-lg font-bold font-mono text-vantage-text">{storm.estimatedHomes.toLocaleString()}</p>
+            <p className="text-[10px] text-vantage-faint uppercase tracking-wider">Hail Reports</p>
+            <p className="text-lg font-bold font-mono text-vantage-text">{storm.reports.filter((r) => r.type === 'HAIL').length}</p>
           </div>
         </div>
         <p className="text-[9px] text-vantage-faint mt-2 leading-relaxed">

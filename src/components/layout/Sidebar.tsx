@@ -21,13 +21,11 @@ const NAV = [
   { href: '/storms',     label: 'Storms',       icon: CloudLightning },
   { href: '/leads',      label: 'Leads',        icon: Users },
   { href: '/territories',      label: 'Territories',      icon: MapPin },
-  { href: '/shingle-analysis', label: 'Shingle Analysis', icon: Layers },
+  { href: '/shingle-analysis', label: 'Shingle Lookup', icon: Layers },
   { href: '/trash',            label: 'Trash',            icon: Trash2 },
 ]
 
-const BOTTOM_NAV = [
-  { href: '/settings',  label: 'Settings',   icon: Settings },
-]
+const BOTTOM_NAV: { href: string; label: string; icon: typeof Settings }[] = []
 
 export default function Sidebar() {
   const pathname = usePathname()

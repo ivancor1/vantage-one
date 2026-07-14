@@ -38,7 +38,7 @@ export default async function StormDetailPage({ params }: Props) {
   const sortedReports = [...storm.reports].sort((a, b) => b.magnitude - a.magnitude)
 
   return (
-    <div className="p-8 space-y-6 max-w-4xl">
+    <div className="p-8 space-y-6 max-w-6xl mx-auto">
 
       <Link
         href="/storms"
@@ -125,12 +125,12 @@ export default async function StormDetailPage({ params }: Props) {
                     <p className="text-2xl font-bold font-mono" style={{ color }}>{storm.severity}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1">Homes in Modeled Radius</p>
-                    <p className="text-2xl font-bold font-mono text-vantage-text">{storm.estimatedHomes.toLocaleString()}</p>
+                    <p className="text-[10px] text-vantage-faint uppercase tracking-widest mb-1">Hail Reports</p>
+                    <p className="text-2xl font-bold font-mono text-vantage-text">{storm.reports.filter((r) => r.type === 'HAIL').length}</p>
                   </div>
                 </div>
                 <p className="text-[10px] text-vantage-faint mt-2.5">
-                  Radius and home count are estimates based on report point density — not exact storm paths or confirmed damage counts.
+                  Radius is modeled from report point density — not an exact storm path or a confirmed damage area.
                 </p>
               </div>
             </div>

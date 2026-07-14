@@ -101,7 +101,8 @@ function buildEvidenceSummary(
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json() as { query?: string }
+  const body = await req.json().catch(() => null) as { query?: string } | null
+  if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   const query = body.query?.trim()
 
   if (!query || query.length < 3) {

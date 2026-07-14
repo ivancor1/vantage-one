@@ -68,18 +68,19 @@ export default function ShingleSearch() {
   }
 
   return (
-    <div className="min-h-screen bg-vantage-black p-6">
-      <div className="max-w-3xl mx-auto">
+    <div>
+      <div>
 
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <Layers className="w-6 h-6 text-vantage-yellow flex-shrink-0" />
-            <h1 className="text-2xl font-bold text-vantage-text tracking-tight">Shingle Analysis</h1>
+            <h1 className="text-2xl font-bold text-vantage-text tracking-tight">Shingle Discontinuation Lookup</h1>
           </div>
           <p className="text-sm text-vantage-muted leading-relaxed">
-            Search a shingle by manufacturer, product line, color, or type. We check manufacturer,
-            distributor, and retailer sources and give you the answer.
+            Is this exact shingle still made? A discontinued shingle that can&apos;t be matched often
+            argues for full replacement in a claim. Web search across manufacturer, distributor, and
+            retailer sources, scored by rules — review the cited evidence yourself.
           </p>
         </div>
 
@@ -107,7 +108,7 @@ export default function ShingleSearch() {
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <Search className="w-4 h-4" />
             }
-            Analyze
+            Look up
           </button>
         </div>
 
@@ -187,7 +188,21 @@ export default function ShingleSearch() {
 
         {/* Result */}
         {state === 'result' && result && (
-          <ResultCard result={result} />
+          <>
+            {result.searchProvider === 'mock' && (
+              <div className="flex items-start gap-3 p-4 mb-4 bg-status-critical/10 border-2 border-status-critical/50 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-status-critical flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-status-critical">DEMO DATA — this is NOT a real result</p>
+                  <p className="text-xs text-vantage-muted mt-0.5">
+                    TAVILY_API_KEY is not configured, so this verdict was fabricated from canned sample text
+                    (the mock always leans &ldquo;discontinued&rdquo;). Set the key in .env.local for real web-sourced results.
+                  </p>
+                </div>
+              </div>
+            )}
+            <ResultCard result={result} />
+          </>
         )}
 
         {/* Empty state */}

@@ -57,6 +57,14 @@ h1, h2, h3 {
   color: #1a1813;
 }
 
+/* ─── Print (evidence report) ────────────────────────────────────────────── */
+@media print {
+  aside, header, .no-print { display: none !important; }
+  main { overflow: visible !important; }
+  body { background: #ffffff; }
+  .report-page { max-width: 100% !important; }
+}
+
 /* ─── Leaflet overrides (light) ──────────────────────────────────────────── */
 
 /* Storm severity label (permanent tooltip) */
