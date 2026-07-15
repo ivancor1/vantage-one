@@ -105,11 +105,11 @@ function LeadsPageInner() {
     }, 100)
   }, [searchParams, hydrated])
 
-  // Storm-generated territories (named after a storm) never show as normal tabs — they exist only
+  // Storm-generated territories (auto-named "… Storm") never show as normal tabs — they exist only
   // as the live "collecting" stream. So the Leads page shows only worked territories (Broken Arrow)
   // until you run Find Leads, and the storm's homes stream into the scan view below.
-  const stormNames = useMemo(() => new Set(storms.map((s) => s.name)), [storms])
-  const displayLeads = (localLeads ?? leads).filter((l) => !l.territoryValue || !stormNames.has(l.territoryValue))
+  const isStormTerritory = (value?: string) => !!value?.endsWith(' Storm')
+  const displayLeads = (localLeads ?? leads).filter((l) => !isStormTerritory(l.territoryValue))
   // The storm's real leads, revealed progressively as `found` climbs during the scan
   const scanTid = scanState?.status === 'running' ? scanState.territoryId : null
   const scanLeads = useMemo(() => {
