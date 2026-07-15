@@ -105,12 +105,19 @@ function LeadsPageInner() {
     }, 100)
   }, [searchParams, hydrated])
 
-  // While a storm scan is "running", hide its territory so its lead count can't leak into the
-  // tabs / All view before the reveal — it should feel like the homes are being found live.
-  const scanningTerritoryId = scanState?.status === 'running' ? scanState.territoryId : null
-  const displayLeads = scanningTerritoryId
-    ? (localLeads ?? leads).filter((l) => l.territoryId !== scanningTerritoryId)
-    : (localLeads ?? leads)
+  // Storm-generated territories (named after a storm) never show as normal tabs — they exist only
+  // as the live "collecting" stream. So the Leads page shows only worked territories (Broken Arrow)
+  // until you run Find Leads, and the storm's homes stream into the scan view below.
+  const stormNames = useMemo(() => new Set(storms.map((s) => s.name)), [storms])
+  const displayLeads = (localLeads ?? leads).filter((l) => !l.territoryValue || !stormNames.has(l.territoryValue))
+  // The storm's real leads, revealed progressively as `found` climbs during the scan
+  const scanTid = scanState?.status === 'running' ? scanState.territoryId : null
+  const scanLeads = useMemo(() => {
+    if (!scanTid) return []
+    return (localLeads ?? leads).filter((l) => l.territoryId === scanTid).sort((a, b) => b.leadScore - a.leadScore)
+  }, [scanTid, localLeads, leads])
+  // Render at most ~180 rows for smooth streaming on camera; the counter still climbs to the true total.
+  const streamed = scanState?.status === 'running' ? scanLeads.slice(0, Math.min(scanState.found, 180)) : []
 
   function handleAnalyze(id: string) {
     setAnalyzingIds((prev) => new Set(prev).add(id))
@@ -546,52 +553,55 @@ function LeadsPageInner() {
         </div>
       )}
 
-      {/* Live "collecting homes" scan view — the Find-leads pseudo-tab */}
+      {/* Live "collecting homes" scan view — real homes stream into the list as they're found */}
       {scanActive && territory === '__scan__' && scanState?.status === 'running' && (
-        <div className="bg-vantage-card border border-vantage-yellow/30 rounded-lg p-8">
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2.5">
+        <div className="space-y-3">
+          <div className="p-4 rounded-lg bg-vantage-card border border-vantage-yellow/40">
+            <div className="flex items-center gap-3">
               <Loader2 className="w-5 h-5 animate-spin text-vantage-yellow flex-shrink-0" />
-              <div>
-                <p className="text-base font-semibold text-vantage-text">Collecting homes near {scanStormName}…</p>
-                <p className="text-xs text-vantage-muted mt-0.5">
-                  Real addressed homes from OpenStreetMap, scored against NOAA radar + NWS spotter hail.
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-vantage-text">Collecting homes near {scanStormName}…</p>
+                <p className="text-[11px] text-vantage-muted mt-0.5">
+                  Real addresses from OpenStreetMap, scored against NOAA radar + NWS spotter hail.
                 </p>
               </div>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <p className="text-3xl font-bold font-mono text-vantage-yellow tabular-nums leading-none">
-                {scanState.found.toLocaleString()}
-              </p>
-              <p className="text-[10px] font-mono text-vantage-faint uppercase tracking-widest mt-1">homes found</p>
-            </div>
-          </div>
-          <div className="h-2 rounded-full bg-vantage-surface overflow-hidden">
-            <div
-              className="h-full bg-vantage-yellow transition-[width] duration-150 ease-out"
-              style={{ width: `${Math.round(scanState.progress * 100)}%` }}
-            />
-          </div>
-          <p className="text-xs font-mono text-vantage-muted mt-3">{scanState.stage}</p>
-          {/* Shimmer skeleton rows — homes streaming in */}
-          <div className="mt-6 space-y-2.5">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3"
-                style={{ animation: 'leadRowIn 600ms ease-out both', animationDelay: `${i * 90}ms` }}
-              >
-                <div className="w-11 h-11 rounded bg-vantage-surface animate-pulse" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-3 w-44 rounded bg-vantage-surface animate-pulse" />
-                  <div className="h-2 w-24 rounded bg-vantage-surface animate-pulse" />
-                </div>
+              <div className="text-right flex-shrink-0">
+                <span className="text-2xl font-bold font-mono text-vantage-yellow tabular-nums leading-none">
+                  {scanState.found.toLocaleString()}
+                </span>
+                <p className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest mt-0.5">homes found</p>
               </div>
-            ))}
+            </div>
+            <div className="h-1.5 rounded-full bg-vantage-surface overflow-hidden mt-3">
+              <div
+                className="h-full bg-vantage-yellow transition-[width] duration-200 ease-out"
+                style={{ width: `${Math.round(scanState.progress * 100)}%` }}
+              />
+            </div>
+            <p className="text-[11px] font-mono text-vantage-muted mt-2">{scanState.stage}</p>
           </div>
-          <p className="text-[11px] text-vantage-faint mt-5">
-            Browse a finished territory in the tabs above while this runs — it keeps collecting in the background.
-          </p>
+
+          {streamed.length > 0 && (
+            <div className="bg-vantage-card border border-vantage-border rounded-lg overflow-hidden">
+              <LeadListHeader />
+              <div className="divide-y divide-vantage-border/60">
+                {streamed.map((lead, i) => (
+                  <div key={lead.id} className="lead-row-in">
+                    <LeadCard
+                      lead={lead}
+                      rank={i + 1}
+                      onStatusChange={(s) => updateStatus(lead.id, s)}
+                      analyzing={analyzingIds.has(lead.id)}
+                      onAnalyze={() => handleAnalyze(lead.id)}
+                      onAnalyzed={handleAnalyzed}
+                      selected={selectedIds.has(lead.id)}
+                      onSelectChange={(on) => toggleSelect(lead.id, on)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
