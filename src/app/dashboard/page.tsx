@@ -55,8 +55,7 @@ export default function DashboardPage() {
   const stats = [
     {
       label: 'Monitored Territories',
-      // Storm-generated territories ("… Storm") are live-scan artifacts, not monitored places
-      value: hydrated ? String(territories.filter((t) => !t.value.endsWith(' Storm')).length) : '—',
+      value: hydrated ? String(territories.length) : '—',
       icon: Map,
       color: 'text-vantage-yellow',
       border: 'border-vantage-yellow/20',

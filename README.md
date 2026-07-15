@@ -78,9 +78,9 @@ radar archives, and mapping data that nobody stitches together.
   second customer (`user_id` + RLS policies).
 - **Synchronous scrape** (~30–60 s, Overpass-bound). Fine locally; a hosted version should
   enqueue a background job and poll — the client's `ScanState` machine already supports it.
-- **OSM address coverage varies by metro** (each scan caps at ~120 addressed buildings;
-  Florida suburbs are sparse, hail-belt metros are rich). Roadmap: Microsoft Building
-  Footprints as the national base layer.
+- **OSM address coverage varies by metro** (each scan returns every addressed building in
+  the radius, capped at ~2,000; Florida suburbs are sparse, hail-belt metros are rich).
+  Roadmap: Microsoft Building Footprints as the national base layer.
 - **Roof age is sparse per-home** (OSM tags only) — so the score leans on the per-home hail
   evidence and area-level Census age, and per-lead `confidence` reflects what was present.
   A county-parcel (ArcGIS) enrichment was prototyped — see

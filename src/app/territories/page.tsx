@@ -51,10 +51,6 @@ export default function TerritoriesPage() {
     type === 'city'         ? 'e.g. Plano, TX' :
                               'e.g. Heritage Oak'
 
-  // Storm-generated territories (auto-named "… Storm") are live-scan artifacts, not user-monitored
-  // places — keep them out of the Monitored Territories list and count.
-  const monitored = territories.filter((t) => !t.value.endsWith(' Storm'))
-
   return (
     <div className="p-8 space-y-6 max-w-5xl mx-auto">
       <div className="flex items-start justify-between gap-4">
@@ -160,13 +156,13 @@ export default function TerritoriesPage() {
             <span className="text-sm font-semibold text-vantage-text">Monitored Territories</span>
           </div>
           {hydrated && (
-            <span className="text-xs text-vantage-faint">{monitored.length} active</span>
+            <span className="text-xs text-vantage-faint">{territories.length} active</span>
           )}
         </div>
 
         {!hydrated ? (
           <div className="px-5 py-8 text-center text-vantage-faint text-xs font-mono">LOADING...</div>
-        ) : monitored.length === 0 ? (
+        ) : territories.length === 0 ? (
           <div className="px-5 py-10 text-center space-y-2">
             <MapPin className="w-6 h-6 text-vantage-faint mx-auto" />
             <p className="text-vantage-muted text-sm">No territories yet.</p>
@@ -174,7 +170,7 @@ export default function TerritoriesPage() {
           </div>
         ) : (
           <div className="divide-y divide-vantage-border">
-            {monitored.map((territory) => {
+            {territories.map((territory) => {
               const meta = TYPE_META[territory.type]
               const stormCount = activeStormsForTerritory(territory, storms)
               const addedDate = new Date(territory.addedAt).toLocaleDateString('en-US', {

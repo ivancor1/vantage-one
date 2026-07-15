@@ -1,10 +1,11 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { CloudLightning, ArrowRight, Users, Loader2, Check } from 'lucide-react'
 import { useStorms } from '@/lib/storm-api'
-import { useStormLeadStates, startFindLeads } from '@/lib/storm-leads'
+import { useStormLeadStates, startFindLeads, hydrateStormLeadStates } from '@/lib/storm-leads'
 
 function severityBadge(s: number) {
   if (s >= 9) return { label: 'CRITICAL', cls: 'bg-status-critical/15 text-status-critical border-status-critical/30' }
@@ -15,13 +16,17 @@ function severityBadge(s: number) {
 export default function StormsPage() {
   const { storms, loading, error } = useStorms()
   const router = useRouter()
-  // Module-scoped store: state survives tab switches; fetch keeps running in background
+  // Module-scoped store: state survives tab switches; the generate-leads request keeps
+  // running in the background while you browse.
   const genStates = useStormLeadStates()
 
-  // NOTE: we intentionally do NOT restore "N leads found" from the DB on load. Every storm
-  // shows its "Find leads in this area" CTA until you click it this session — so a pre-built
-  // territory (e.g. the demo storm) still presents the button, and clicking it returns the
-  // existing leads instantly. A page refresh resets the CTA, keeping the flow repeatable.
+  // After a refresh, restore "N leads found — view →" for any storm whose leads already exist
+  // in the DB (territories are named after the storm), so we never pretend an already-run
+  // storm is un-run. hydrateStormLeadStates is idempotent and skips storms still running.
+  useEffect(() => {
+    hydrateStormLeadStates(storms.map((s) => ({ id: s.id, name: s.name })))
+  }, [storms])
+
   function findLeads(e: React.MouseEvent, stormId: string) {
     e.preventDefault()
     e.stopPropagation()

@@ -106,9 +106,8 @@ h1, h2, h3 {
   background: #ffffff;
 }
 
-/* Lead row reveal — the top rows fade+rise in when a territory's list first renders,
-   so a pre-built scrape visibly "populates" on the Find-Leads click. Plays once per mount
-   (never re-fires on re-render/batch-assess). Respects reduced-motion. */
+/* Lead row entrance — the top rows fade+rise in when a list first renders. Plays once per
+   mount (never re-fires on re-render/batch-assess). Respects reduced-motion. */
 @keyframes leadRowIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }

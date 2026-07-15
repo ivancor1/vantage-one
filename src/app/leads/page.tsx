@@ -54,16 +54,14 @@ function LeadsPageInner() {
     if (t) setTerritory(t)
   }, [searchParams])
 
-  // Arriving mid-scan from a storm page (?storm=): show a live "finding homes…" banner,
+  // Arriving mid-generation from a storm page (?storm=): show a "finding homes…" banner,
   // let the user browse other territories, then drop into the new territory when it lands.
   const stormParam = searchParams.get('storm')
   const genStates = useStormLeadStates()
   const scanState = stormParam ? genStates[stormParam] : undefined
   const { storms } = useStorms()
-  const scanActive = Boolean(stormParam) && scanState?.status === 'running'
   const scanStormName = storms.find((s) => s.id === stormParam)?.name ?? 'this storm'
   const landedRef = useRef<string | null>(null)
-  const scanLandedRef = useRef<string | null>(null)
   useEffect(() => {
     if (!stormParam || scanState?.status !== 'done') return
     if (landedRef.current === stormParam) return
@@ -71,14 +69,6 @@ function LeadsPageInner() {
     reload().then(() => setTerritory(scanState.territoryId))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stormParam, scanState])
-
-  // Arriving via Find Leads → land on the live "collecting homes" scan view (a pseudo-tab)
-  useEffect(() => {
-    if (scanActive && stormParam && scanLandedRef.current !== stormParam) {
-      scanLandedRef.current = stormParam
-      setTerritory('__scan__')
-    }
-  }, [scanActive, stormParam])
 
   // The most sellable filter there is: homes where two independent government sources
   // (NOAA radar + NWS spotters) both confirm hail
@@ -105,19 +95,7 @@ function LeadsPageInner() {
     }, 100)
   }, [searchParams, hydrated])
 
-  // Storm-generated territories (auto-named "… Storm") never show as normal tabs — they exist only
-  // as the live "collecting" stream. So the Leads page shows only worked territories (Broken Arrow)
-  // until you run Find Leads, and the storm's homes stream into the scan view below.
-  const isStormTerritory = (value?: string) => !!value?.endsWith(' Storm')
-  const displayLeads = (localLeads ?? leads).filter((l) => !isStormTerritory(l.territoryValue))
-  // The storm's real leads, revealed progressively as `found` climbs during the scan
-  const scanTid = scanState?.status === 'running' ? scanState.territoryId : null
-  const scanLeads = useMemo(() => {
-    if (!scanTid) return []
-    return (localLeads ?? leads).filter((l) => l.territoryId === scanTid).sort((a, b) => b.leadScore - a.leadScore)
-  }, [scanTid, localLeads, leads])
-  // Render at most ~180 rows for smooth streaming on camera; the counter still climbs to the true total.
-  const streamed = scanState?.status === 'running' ? scanLeads.slice(0, Math.min(scanState.found, 180)) : []
+  const displayLeads = localLeads ?? leads
 
   function handleAnalyze(id: string) {
     setAnalyzingIds((prev) => new Set(prev).add(id))
@@ -137,9 +115,9 @@ function LeadsPageInner() {
   }
 
   // Batch: assess a FIXED top-N of the highest-scoring un-read roofs in the selected tab —
-  // NOT the whole territory (800+ would be slow, costly, and never "finish" on camera).
-  // The count is locked when you click, so a still-running scrape can't grow the batch.
-  // Pooled so cards fill in live. Per-lead endpoint (gpt-4o-mini vision) — ~$0.002/roof.
+  // not the whole territory (800+ homes would be slow and costly in one shot). The count is
+  // locked when you click, so a still-running scrape can't grow the batch. Pooled so cards
+  // fill in live. Per-lead endpoint (gpt-4o-mini vision) — ~$0.002/roof.
   const ASSESS_BATCH = 30
   async function analyzeAll() {
     if (batch.running) return
@@ -419,26 +397,17 @@ function LeadsPageInner() {
         </div>
       </div>
 
-      {/* Live scan banner — arriving from a storm's "Find leads" */}
-      {scanActive && scanState?.status === 'running' && territory !== '__scan__' && (
-        <div className="p-4 rounded-lg bg-vantage-card border border-vantage-yellow/40 space-y-2.5">
-          <div className="flex items-center gap-3">
-            <Loader2 className="w-4 h-4 animate-spin text-vantage-yellow flex-shrink-0" />
-            <p className="text-sm font-semibold text-vantage-text flex-1">Still collecting homes near {scanStormName}…</p>
-            <span className="font-mono text-sm font-bold text-vantage-yellow tabular-nums">
-              {scanState.found.toLocaleString()} homes
-            </span>
+      {/* Live generation banner — arriving from a storm's "Find leads" */}
+      {stormParam && scanState?.status === 'running' && (
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-vantage-card border border-vantage-yellow/40">
+          <Loader2 className="w-4 h-4 animate-spin text-vantage-yellow flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-vantage-text">Finding homes near {scanStormName}…</p>
+            <p className="text-xs text-vantage-muted mt-0.5">
+              Scraping real addressed homes near the hail reports and scoring each against radar + spotter
+              evidence — usually under a minute. Browse your other territories below; this drops in automatically.
+            </p>
           </div>
-          <div className="h-1.5 rounded-full bg-vantage-surface overflow-hidden">
-            <div
-              className="h-full bg-vantage-yellow transition-[width] duration-150 ease-out"
-              style={{ width: `${Math.round(scanState.progress * 100)}%` }}
-            />
-          </div>
-          <p className="text-xs font-mono text-vantage-muted">{scanState.stage}</p>
-          <p className="text-[11px] text-vantage-faint">
-            Browse your other territories below — this drops in automatically when it lands.
-          </p>
         </div>
       )}
       {stormParam && scanState?.status === 'error' && (
@@ -449,23 +418,8 @@ function LeadsPageInner() {
       )}
 
       {/* Territory tabs */}
-      {!loading && (territories.length > 0 || scanActive) && (
+      {!loading && territories.length > 0 && (
         <div className="flex items-center gap-1 flex-wrap">
-          {scanActive && (
-            <button
-              onClick={() => setTerritory('__scan__')}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-colors',
-                territory === '__scan__'
-                  ? 'bg-vantage-yellow text-vantage-black border-vantage-yellow'
-                  : 'text-vantage-muted border-vantage-border hover:border-vantage-bright hover:text-vantage-text'
-              )}
-            >
-              <Loader2 className="w-3 h-3 animate-spin" />
-              {scanStormName}
-              <span className="text-[10px] font-bold rounded px-1 opacity-70">collecting…</span>
-            </button>
-          )}
           <button
             onClick={() => { setTerritory('all'); setFilter('all') }}
             className={clsx(
@@ -553,58 +507,6 @@ function LeadsPageInner() {
         </div>
       )}
 
-      {/* Live "collecting homes" scan view — real homes stream into the list as they're found */}
-      {scanActive && territory === '__scan__' && scanState?.status === 'running' && (
-        <div className="space-y-3">
-          <div className="p-4 rounded-lg bg-vantage-card border border-vantage-yellow/40">
-            <div className="flex items-center gap-3">
-              <Loader2 className="w-5 h-5 animate-spin text-vantage-yellow flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-vantage-text">Collecting homes near {scanStormName}…</p>
-                <p className="text-[11px] text-vantage-muted mt-0.5">
-                  Real addresses from OpenStreetMap, scored against NOAA radar + NWS spotter hail.
-                </p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <span className="text-2xl font-bold font-mono text-vantage-yellow tabular-nums leading-none">
-                  {scanState.found.toLocaleString()}
-                </span>
-                <p className="text-[9px] font-mono text-vantage-faint uppercase tracking-widest mt-0.5">homes found</p>
-              </div>
-            </div>
-            <div className="h-1.5 rounded-full bg-vantage-surface overflow-hidden mt-3">
-              <div
-                className="h-full bg-vantage-yellow transition-[width] duration-200 ease-out"
-                style={{ width: `${Math.round(scanState.progress * 100)}%` }}
-              />
-            </div>
-            <p className="text-[11px] font-mono text-vantage-muted mt-2">{scanState.stage}</p>
-          </div>
-
-          {streamed.length > 0 && (
-            <div className="bg-vantage-card border border-vantage-border rounded-lg overflow-hidden">
-              <LeadListHeader />
-              <div className="divide-y divide-vantage-border/60">
-                {streamed.map((lead, i) => (
-                  <div key={lead.id} className="lead-row-in">
-                    <LeadCard
-                      lead={lead}
-                      rank={i + 1}
-                      onStatusChange={(s) => updateStatus(lead.id, s)}
-                      analyzing={analyzingIds.has(lead.id)}
-                      onAnalyze={() => handleAnalyze(lead.id)}
-                      onAnalyzed={handleAnalyzed}
-                      selected={selectedIds.has(lead.id)}
-                      onSelectChange={(on) => toggleSelect(lead.id, on)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Loading */}
       {loading && (
         <div className="py-16 text-center text-vantage-faint text-xs font-mono">LOADING LEADS...</div>
@@ -650,8 +552,7 @@ function LeadsPageInner() {
               <div
                 key={lead.id}
                 id={`lead-${lead.id}`}
-                // Stagger only the top rows so a pre-built list visibly "populates" on the
-                // Find-Leads click; rows below the fold appear immediately.
+                // Entrance animation on just the above-the-fold rows; the rest render immediately.
                 className={clsx('transition-all duration-700', i < 28 && 'lead-row-in', highlightId === lead.id && 'ring-2 ring-inset ring-vantage-yellow')}
                 style={i < 28 ? { animationDelay: `${i * 45}ms` } : undefined}
               >

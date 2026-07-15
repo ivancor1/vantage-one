@@ -41,8 +41,8 @@ export default function MapPage() {
     <div className="relative overflow-hidden" style={{ height: 'calc(100vh - 48px)' }}>
       <MapView
         storms={storms}
-        territories={territories.filter((t) => !t.value.endsWith(' Storm'))}
-        leads={leads.filter((l) => !l.territoryValue?.endsWith(' Storm'))}
+        territories={territories}
+        leads={leads}
         layers={layers}
         selectedStormId={selectedStorm?.id ?? null}
         onStormSelect={setSelectedStorm}
